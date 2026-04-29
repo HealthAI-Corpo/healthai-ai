@@ -1,0 +1,44 @@
+# Environnements Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# uv
+.uv/
+
+# Variables d'environnement (jamais commiter les vraies valeurs)
+.env
+!.env.example
+
+# Modèles ML sérialisés (trop lourds pour git — stocker sur S3/GCS ou DVC)
+*.joblib
+*.pkl
+*.pt
+*.pth
+models/
+
+# Cache HuggingFace
+.hf_cache/
+
+# Logs
+*.log
+logs/
+
+# Couverture de tests
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Build
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
