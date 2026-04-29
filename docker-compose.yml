@@ -11,6 +11,9 @@ services:
       - postgres
     networks:
       - healthai-net
+    volumes:
+      - .:/app
+      - hf_cache:/app/.hf_cache
 
   healthai-workout:
     build: ./healthai-workout
