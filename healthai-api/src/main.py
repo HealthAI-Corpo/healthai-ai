@@ -1,6 +1,7 @@
 import httpx
 from fastapi import FastAPI
 from src.core.config import settings
+from src.schemas.health import InternalHealthResponse
 
 app = FastAPI(title="HealthAI Gateway")
 
@@ -8,7 +9,7 @@ app = FastAPI(title="HealthAI Gateway")
 async def root():
     return {"status": "online", "message": "Welcome to HealthAI API"}
 
-@app.get("/test-internal")
+@app.get("/test-internal", response_model=InternalHealthResponse)
 async def test_internal():
     async with httpx.AsyncClient() as client:
         try:
