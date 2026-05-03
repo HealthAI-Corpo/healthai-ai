@@ -1,12 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from src.services.ai_service import ai_service  # On importe l'instance déjà créée
+from src.services.ai_service import ai_service
+from src.services.nutrition_service import enrich_with_nutrition
+from src.database import AsyncSessionLocal  # On ne garde que l'async
 from src.core.config import settings
 
 app = FastAPI(title="HealthAI Vision Service")
 
 @app.get("/health")
 async def health():
-    # On peut même vérifier si le modèle est bien chargé
     return {
         "status": "online",
         "service": "healthai-vision",
@@ -19,26 +20,32 @@ async def analyze_meal(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400, 
-            detail="Format de fichier non supporté. Veuillez envoyer une image."
+            detail="Format de fichier non supporté."
         )
 
     try:
-        # 2. Lecture des octets de l'image
+        # 2. Lecture des octets
         image_bytes = await file.read()
 
-        # 3. Appel au service IA
-        results = ai_service.analyze_image(image_bytes)
+        # 3. IA (YOLO)
+        raw_results = ai_service.analyze_image(image_bytes)
 
-        # 4. Retour des résultats
+        # 4. Session Async avec gestionnaire de contexte
+        # C'est ici que la magie opère
+        async with AsyncSessionLocal() as db:
+            enriched_results = await enrich_with_nutrition(raw_results, db)
+
+        # 5. Retour des résultats
         return {
             "filename": file.filename,
-            "count": len(results),
-            "detections": results
+            "count": len(enriched_results),
+            "detections": enriched_results
         }
 
     except Exception as e:
-        # Log l'erreur ici si tu as un logger
+        # On affiche l'erreur réelle dans les logs pour débugger
+        print(f"Erreur CRITIQUE : {str(e)}")
         raise HTTPException(
             status_code=500, 
-            detail=f"Erreur interne lors de l'analyse : {str(e)}"
+            detail=f"Erreur lors de l'analyse : {str(e)}"
         )
