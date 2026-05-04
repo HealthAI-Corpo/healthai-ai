@@ -6,3 +6,5 @@ class Settings(BaseSettings):
     SERVICE_PORT: int = 8001
     # Spécifique à la Vision
     MODEL_NAME: str = "yolov8n.pt"
+    
+settings = Settings()

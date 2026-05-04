@@ -92,20 +92,35 @@ Gerée par le gateway (healthai-api) config controle le JWT user et la config zi
 
 Identifie les aliments dans une photo de repas et calcule les macronutriments.
 
-**Stack envisagée :** FastAPI · HuggingFace Transformers (EfficientNet-B0 + YOLO v8) · PostgreSQL · uv
+**Stack :** Framework : FastAPI
 
-**Flux principal :**
-
-```
-POST /analyze/meal (image) → classification Food-101 → cross-ref table aliment → macros → suggestions
-```
+- IA : Ultralytics YOLOv8 (Modèle yolov8n.pt)
+- Traitement d'image : Pillow & OpenCV (headless)
+- Runtime : Python 3.12 (via uv)
 
 **Points d'attention :**
 
-- Mapping Food-101 (101 classes anglaises) ↔ table `aliment` à construire
-- Cache par hash SHA-256 de l'image dans la table `analyse_repas` (migration 000006)
-- Rate limiting : 10 req/min (appels modèle coûteux)
-- Marge d'erreur calories : ±20% — à afficher à l'utilisateur
+- Dépendances système : Le Dockerfile doit inclure libgl1 et libglib2.0-0 pour qu'OpenCV puisse fonctionner en environnement Linux Slim.
+- Cache Modèle : Le fichier poids du modèle (.pt) est stocké dans le conteneur. Une persistence via volume est recommandée pour éviter le re-téléchargement au reboot.
+- Seuil de confiance : Actuellement fixé à 0.5 pour éviter les faux positifs (ex: confusion entre pomme et orange sur des scores faibles).
+- Sérialisation : Conversion automatique des types Numeric/Decimal de PostgreSQL vers float pour la compatibilité JSON.
+
+**État de l'implémentation :**
+
+- [x] Configuration de l'environnement Docker avec dépendances système (libgl1).
+- [x] Chargement asynchrone du modèle YOLOv8 au démarrage (Singleton).
+- [x] Endpoint POST /analyze fonctionnel (acceptation d'images, détection et filtrage par confiance > 0.5).
+- [x] Mapping des labels anglais YOLO vers la table PostgreSQL aliment.
+- [x] Calcul des macronutriments agrégés.
+
+**Installation & Lancement spécifique :**
+
+Le service nécessite des bibliothèques de calcul lourdes (Torch). Le premier build peut prendre environ 10-15 minutes.
+
+- docker compose up --build healthai-vision
+
+**Flux de données actuel :**
+Client (Image) → POST /analyze → YOLOv8 (Inference) → SQLAlchemy Async (Query WHERE lower(trim(nom))) → Dictionnaire Enrichi (Nutrition Data) → JSON final.
 
 ---
 

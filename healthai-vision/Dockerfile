@@ -3,11 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Dépendances système nécessaires pour torch/Pillow
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libgl1 \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
 # uv pour la gestion des dépendances
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
