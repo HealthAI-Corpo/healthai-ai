@@ -1,5 +1,7 @@
 import os
+
 from motor.motor_asyncio import AsyncIOMotorClient
+
 
 class MongoDBManager:
     def __init__(self):
@@ -17,6 +19,7 @@ class MongoDBManager:
     def close(self):
         if self.client:
             self.client.close()
+
 
 # On instancie le manager
 mongo_db = MongoDBManager()

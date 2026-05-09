@@ -1,12 +1,14 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+from fastapi import FastAPI, File, HTTPException, UploadFile
+
 from src.database import AsyncSessionLocal
+from src.database_mongo import mongo_db
 from src.services.ai_service import ai_service
 from src.services.nutrition_service import enrich_with_nutrition
-from src.services.recommandation_service import generate_nutritional_advice # Nouvel import
-from src.database_mongo import mongo_db 
+from src.services.recommandation_service import generate_nutritional_advice  # Nouvel import
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,7 +16,9 @@ async def lifespan(app: FastAPI):
     yield
     mongo_db.close()
 
+
 app = FastAPI(title="HealthAI Vision Service", lifespan=lifespan)
+
 
 @app.get("/health")
 async def health():
@@ -22,11 +26,12 @@ async def health():
         "status": "online",
         "service": "healthai-vision",
         "model_loaded": ai_service.model is not None,
-        "mongodb_connected": mongo_db.db is not None
+        "mongodb_connected": mongo_db.db is not None,
     }
 
+
 @app.post("/analyze")
-async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"): 
+async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Format de fichier non supporté.")
 
@@ -40,14 +45,22 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
         async with AsyncSessionLocal() as db:
             # Enrichissement calories/protéines via Postgres
             enriched_results = await enrich_with_nutrition(raw_results, db)
-            
+
             # Calcul des totaux
             total_repas = {
-                "calories": sum(item.get('nutrition', {}).get('calories', 0) for item in enriched_results),
-                "proteines": sum(item.get('nutrition', {}).get('proteines', 0) for item in enriched_results),
-                "glucides": sum(item.get('nutrition', {}).get('glucides', 0) for item in enriched_results),
-                "lipides": sum(item.get('nutrition', {}).get('lipides', 0) for item in enriched_results),
-                "eau_ml": sum(item.get('nutrition', {}).get('eau', 0) for item in enriched_results)
+                "calories": sum(
+                    item.get("nutrition", {}).get("calories", 0) for item in enriched_results
+                ),
+                "proteines": sum(
+                    item.get("nutrition", {}).get("proteines", 0) for item in enriched_results
+                ),
+                "glucides": sum(
+                    item.get("nutrition", {}).get("glucides", 0) for item in enriched_results
+                ),
+                "lipides": sum(
+                    item.get("nutrition", {}).get("lipides", 0) for item in enriched_results
+                ),
+                "eau_ml": sum(item.get("nutrition", {}).get("eau", 0) for item in enriched_results),
             }
 
         # 3. Logique de Recommandation Intelligente
@@ -65,16 +78,18 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
 
         else:
             # Cas où YOLO ne voit rien du tout
-            conseil = "Aucun aliment reconnu. Essayez de prendre une photo plus claire ou de plus près."
-            
+            conseil = (
+                "Aucun aliment reconnu. Essayez de prendre une photo plus claire ou de plus près."
+            )
+
         # 4. Sauvegarde dans MongoDB (Historique)
         consumption_doc = {
             "user_id": user_id,
             "timestamp": datetime.utcnow(),
             "summary": total_repas,
-            "details": enriched_results
+            "details": enriched_results,
         }
-        
+
         if mongo_db.db is not None:
             await mongo_db.db.consumptions.insert_one(consumption_doc)
 
@@ -84,7 +99,7 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
             "user_id": user_id,
             "count": len(enriched_results),
             "total_repas": total_repas,
-            "recommandation": conseil, 
+            "recommandation": conseil,
             "detections": enriched_results,
         }
 

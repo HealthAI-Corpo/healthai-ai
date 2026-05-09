@@ -5,9 +5,11 @@ from src.schemas.health import InternalHealthResponse
 
 app = FastAPI(title="HealthAI Gateway")
 
+
 @app.get("/")
 async def root():
     return {"status": "online", "message": "Welcome to HealthAI API"}
+
 
 @app.get("/test-internal", response_model=InternalHealthResponse)
 async def test_internal():
@@ -24,5 +26,5 @@ async def test_internal():
     return {
         "gateway": "OK",
         "vision_service": vision_status,
-        "workout_service": workout_status
+        "workout_service": workout_status,
     }
