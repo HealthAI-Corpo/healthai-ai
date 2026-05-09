@@ -7,7 +7,7 @@ from sqlalchemy.orm import declarative_base
 load_dotenv()
 
 # On définit Base ici pour que tous les modèles puissent l'importer
-Base = declarative_base()  # <--- Ajoute cette ligne
+Base = declarative_base()  
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_async_engine(DATABASE_URL, echo=True)

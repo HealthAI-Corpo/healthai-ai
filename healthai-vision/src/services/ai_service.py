@@ -8,7 +8,7 @@ class AIService:
     def __init__(self):
         # Charge le modèle Nano (le plus rapide pour le CPU)
         # Il sera téléchargé automatiquement dans le conteneur lors du premier appel
-        self.model = YOLO("yolov8n.pt")
+        self.model = YOLO("yolov8m.pt")
 
     def analyze_image(self, image_bytes: bytes):
         img = Image.open(io.BytesIO(image_bytes))
