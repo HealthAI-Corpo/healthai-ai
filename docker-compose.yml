@@ -38,6 +38,7 @@ services:
       - ./healthai-vision/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db
+      - MONGODB_URL=mongodb://mongo:27017
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache

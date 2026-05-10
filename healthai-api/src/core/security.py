@@ -7,9 +7,9 @@ zitadel_auth_url = f"{settings.ZITADEL_DOMAIN}/oauth/v2/authorize"
 zitadel_token_url = f"{settings.ZITADEL_DOMAIN}/oauth/v2/token"
 
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl=zitadel_auth_url,
-    tokenUrl=zitadel_token_url
+    authorizationUrl=zitadel_auth_url, tokenUrl=zitadel_token_url
 )
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """

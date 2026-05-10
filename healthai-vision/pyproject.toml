@@ -26,6 +26,7 @@ dependencies = [
     "strawberry-graphql[fastapi]>=0.315.3",
     "pydantic-settings>=2.14.0",
     "ultralytics>=8.4.46",
+    "motor>=3.7.1",
 ]
 
 [project.optional-dependencies]
