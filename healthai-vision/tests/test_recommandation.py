@@ -1,3 +1,12 @@
+"""
+TEST UNITAIRE : Service de Recommandation
+Ce test vérifie l'intelligence nutritionnelle du système :
+1. On simule un profil utilisateur avec un objectif de "Perte de poids".
+2. On simule un historique de consommation vide dans MongoDB.
+3. On vérifie que l'algorithme calcule bien le besoin calorique théorique
+   MOINS le déficit de 500 kcal (Déficit de perte de poids).
+"""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

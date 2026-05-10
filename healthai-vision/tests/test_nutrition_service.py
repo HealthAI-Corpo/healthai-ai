@@ -1,3 +1,12 @@
+"""
+TEST UNITAIRE : Service d'Enrichissement Nutritionnel
+Ce test vérifie la logique de "Mapping" et d'accès aux données :
+1. On simule (mock) une détection faite par l'IA (ex: un bol).
+2. On simule la réponse de la base de données PostgreSQL.
+3. On vérifie que le service transforme bien "bowl" en "Oatmeal"
+   et récupère les bonnes valeurs caloriques.
+"""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

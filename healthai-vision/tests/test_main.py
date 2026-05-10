@@ -1,3 +1,11 @@
+"""
+TEST D'INTÉGRATION : Point d'entrée de l'API (/analyze)
+Ce test simule l'envoi d'une image par un utilisateur et vérifie que :
+1. Le serveur accepte la requête (Code 200).
+2. La réponse contient les clés essentielles (total_repas, recommandation).
+3. Les calculs nutritionnels de base sont renvoyés au bon format.
+"""
+
 import io
 
 import pytest
