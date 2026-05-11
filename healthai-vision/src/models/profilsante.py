@@ -3,7 +3,7 @@ from src.database import Base
 
 class ProfilSante(Base):
     __tablename__ = "profil_sante"
-    id_profil_sante = Column("id_profil", Integer, primary_key=True)
+    id_profil = Column(Integer, primary_key=True)
 
     id_utilisateur = Column(Integer, ForeignKey("utilisateur.id_utilisateur")) 
 

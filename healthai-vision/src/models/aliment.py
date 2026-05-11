@@ -4,7 +4,7 @@ from src.database import Base
 class Aliment(Base):
     __tablename__ = "aliment"
 
-    id = Column("id_aliment", Integer, primary_key=True, index=True) # On utilise 'id'
+    id_aliment = Column(Integer, primary_key=True, index=True)
     nom = Column(String(255), nullable=False)
     categorie = Column(String(100))
     type_repas = Column(String(50))
