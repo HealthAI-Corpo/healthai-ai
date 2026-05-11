@@ -16,7 +16,6 @@ __pycache__/
 *.pkl
 *.pt
 *.pth
-models/
 
 # Cache HuggingFace
 .hf_cache/
