@@ -2,9 +2,9 @@ from sqlalchemy import Column, Integer, String, Numeric
 from src.database import Base  
 
 class Aliment(Base):
-    __tablename__ = "aliments"
+    __tablename__ = "aliment"
 
-    id = Column(Integer, primary_key=True, index=True) # On utilise 'id'
+    id = Column("id_aliment", Integer, primary_key=True, index=True) # On utilise 'id'
     nom = Column(String(255), nullable=False)
     categorie = Column(String(100))
     type_repas = Column(String(50))

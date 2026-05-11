@@ -75,7 +75,7 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
         elif len(enriched_results) > 0 and not (has_food or has_water):
             # Cas où on détecte un objet (ex: bowl) mais qui ne contient rien de connu
             conseil = "Objet reconnu (contenant), mais le contenu alimentaire n'a pas pu être identifié pour calculer vos apports."
-
+        
         else:
             # Cas où YOLO ne voit rien du tout
             conseil = (
