@@ -1,9 +1,11 @@
+version: "3.9"
+
 services:
   # --- GATEWAY PRINCIPALE ---
   healthai-api:
     build: ./healthai-api
     ports:
-      - "8000:8000"
+      - "${HEALTHAI_API_PORT}:8000"
     env_file:
       - ./healthai-api/.env
     # Montage du dossier src local vers le dossier app dans le conteneur
@@ -25,7 +27,7 @@ services:
     depends_on:
       - healthai-vision
       - healthai-workout
-      - postgres
+      #- postgres
     networks:
       - healthai-net
 
@@ -33,12 +35,12 @@ services:
   healthai-vision:
     build: ./healthai-vision
     ports:
-      - "8001:8001"
+      - "${HEALTHAI_VISION_PORT}:8001"
     env_file:
       - ./healthai-vision/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db
-      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URL=${MONGODB_URL}
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache
@@ -54,8 +56,8 @@ services:
         "8001",
         "--reload",
       ]
-    depends_on:
-      - postgres
+    #depends_on:
+    #  - postgres
     networks:
       - healthai-net
 
@@ -63,12 +65,12 @@ services:
   healthai-workout:
     build: ./healthai-workout
     ports:
-      - "8002:8002"
+      - "${HEALTHAI_WORKOUT_PORT}:8002"
     env_file:
       - ./healthai-workout/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db
-      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URL=${MONGODB_URL}
     volumes:
       - ./healthai-workout/src:/app/src
     command:
@@ -84,7 +86,7 @@ services:
         "--reload",
       ]
     depends_on:
-      - postgres
+      #- postgres
       - mongo
     networks:
       - healthai-net
@@ -92,28 +94,28 @@ services:
   mongo:
     image: mongo:7
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT}:27017"
     volumes:
       - mongo-data:/data/db
     networks:
       - healthai-net
 
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: healthai
-      POSTGRES_PASSWORD: healthai
-      POSTGRES_DB: healthai_db
-    ports:
-      - "5433:5432"
-    volumes:
-      - pg-data:/var/lib/postgresql/data
-    networks:
-      - healthai-net
+  #postgres:
+  #  image: postgres:16
+  #  environment:
+  #    POSTGRES_USER: healthai
+  #    POSTGRES_PASSWORD: healthai
+  #    POSTGRES_DB: healthai_db
+  #  ports:
+  #    - "5433:5432"
+  #  volumes:
+  #    - pg-data:/var/lib/postgresql/data
+  #  networks:
+  #    - healthai-net
 
 volumes:
   mongo-data:
-  pg-data:
+  #pg-data:
   hf_cache:
 
 networks:
