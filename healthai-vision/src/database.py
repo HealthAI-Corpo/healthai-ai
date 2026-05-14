@@ -10,6 +10,8 @@ load_dotenv()
 Base = declarative_base()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DATABASE_URL = "postgresql+asyncpg://healthai:PASSWORD@localhost:5432/healthai_db"
 engine = create_async_engine(DATABASE_URL, echo=True)
 
 AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

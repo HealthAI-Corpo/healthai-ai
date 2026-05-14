@@ -27,18 +27,20 @@ services:
       - healthai-workout
       - postgres
     networks:
-      - healthai-net
+      - internal
 
   # --- SERVICE VISION ---
   healthai-vision:
     build: ./healthai-vision
     ports:
-      - "8001:8001"
+      - "${HEALTHAI_VISION_PORT:-8001}:8001"
     env_file:
       - ./healthai-vision/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db
-      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
+      - HF_CACHE_DIR=/app/.hf_cache
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache
@@ -57,18 +59,18 @@ services:
     depends_on:
       - postgres
     networks:
-      - healthai-net
+      - internal
 
   # --- SERVICE WORKOUT ---
   healthai-workout:
     build: ./healthai-workout
     ports:
-      - "8002:8002"
+      - "${HEALTHAI_WORKOUT_PORT:-8002}:8002"
     env_file:
       - ./healthai-workout/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db
-      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
     volumes:
       - ./healthai-workout/src:/app/src
     command:
@@ -87,7 +89,7 @@ services:
       - postgres
       - mongo
     networks:
-      - healthai-net
+      - internal
 
   mongo:
     image: mongo:7
@@ -96,7 +98,7 @@ services:
     volumes:
       - mongo-data:/data/db
     networks:
-      - healthai-net
+      - internal
 
   postgres:
     image: postgres:16
@@ -107,9 +109,10 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - pg-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d:ro
+      - pg-data:/var/lib/postgresql/data #
     networks:
-      - healthai-net
+      - internal
 
 volumes:
   mongo-data:
@@ -117,5 +120,5 @@ volumes:
   hf_cache:
 
 networks:
-  healthai-net:
+  internal:
     driver: bridge
