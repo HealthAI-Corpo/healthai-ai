@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -7,12 +6,11 @@ from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
 
-
 async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
-    # 1. Récupérer le profil santé complet
+    # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
     result = await db_sql.execute(
         select(ProfilSante)
-        .join(Utilisateur, Utilisateur.id_profil_sante == ProfilSante.id_profil_sante)
+        .join(Utilisateur, Utilisateur.id_utilisateur == ProfilSante.id_utilisateur)
         .where(Utilisateur.id_utilisateur == user_id)
     )
     profil = result.scalar_one_or_none()
@@ -20,17 +18,19 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
     if not profil:
         return "Profil santé introuvable. Veuillez compléter vos informations."
 
-    # 2. Calcul des besoins théoriques (TDEE)
+    # 2. Calcul des besoins (Sécurité sur le poids qui peut être None en base)
+    poids_actuel = float(profil.poids_kg or 70.0)
+    
     facteur_activite = 1.2
     if profil.niveau_activite == "Modéré":
         facteur_activite = 1.4
     elif profil.niveau_activite == "Intense":
         facteur_activite = 1.6
 
-    besoin_calorique_base = float(profil.poids_kg) * 30 * facteur_activite
-    cible_proteines = float(profil.poids_kg) * 1.5
+    besoin_calorique_base = poids_actuel * 30 * facteur_activite
+    cible_proteines = poids_actuel * 1.5
 
-    # 3. Récupération de la consommation réelle du jour (MongoDB)
+    # 3. Récupération MongoDB (Inchangé)
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     cursor = mongo_db.db.consumptions.find({"user_id": str(user_id), "timestamp": {"$gte": today}})
 
@@ -42,7 +42,7 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         conso_jour["glu"] += float(summary.get("glucides", 0))
         conso_jour["eau"] += float(summary.get("eau_ml", 0))
 
-    # 4. Ajustement de l'objectif selon le profil
+    # 4. Ajustement de l'objectif
     besoin_final = besoin_calorique_base
     if profil.objectif_principal == "Perte de poids":
         besoin_final = besoin_calorique_base - 500
@@ -50,48 +50,27 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
     reste_cal = besoin_final - conso_jour["cal"]
     manque_prot = cible_proteines - conso_jour["prot"]
 
-    # 5. Génération du message de base (Nutrition)
+    # 5. Génération du message
     advice = ""
-
-    # --- Cas 1 : Perte de poids ---
     if profil.objectif_principal == "Perte de poids":
         limite_glucides = (besoin_final * 0.40) / 4
-
         if reste_cal < 0:
             advice = f"Quota perte de poids atteint ({int(conso_jour['cal'])} kcal). "
         elif conso_jour["glu"] > limite_glucides:
-            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g), privilégiez les protéines. "
-        elif reste_cal < 300:
-            advice = f"Presque fini ! Reste {int(reste_cal)} kcal. Misez sur des légumes. "
-        elif manque_prot > 30:
-            advice = f"Reste {int(reste_cal)} kcal. Boostez les protéines (poulet, poisson) pour vos muscles. "
+            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
         else:
-            advice = f"Belle progression ! Marge : {int(reste_cal)} kcal en déficit. "
-
-    # --- Cas 2 : Prise de masse ou Sport ---
-    elif (
-        "masse" in profil.objectif_principal.lower()
-        or "sport" in str(profil.objectif_principal).lower()
-    ):
-        if reste_cal > 800:
-            advice = f"N'oubliez pas de manger ! Il manque {int(reste_cal)} kcal. "
-        elif manque_prot > 20:
-            advice = f"Calories OK, mais manque {int(manque_prot)}g de protéines. "
-        else:
-            advice = f"Bonne gestion de votre masse. Reste {int(reste_cal)} kcal. "
-
-    # --- Cas par défaut (Maintien) ---
+            advice = f"Belle progression ! Marge : {int(reste_cal)} kcal. "
+            
+    elif "masse" in (profil.objectif_principal or "").lower():
+        advice = f"Bonne gestion de votre masse. Reste {int(reste_cal)} kcal. "
     else:
-        if reste_cal < 0:
-            advice = f"Maintenance dépassée ({int(conso_jour['cal'])} kcal). "
-        else:
-            advice = f"Journée équilibrée. Reste : {int(reste_cal)} kcal. "
+        advice = f"Journée équilibrée. Reste : {int(reste_cal)} kcal. "
 
-    # 6. Ajout de la logique d'hydratation (Suffixe)
+    # 6. Hydratation (2L par défaut)
     objectif_eau = 2000
     if conso_jour["eau"] < objectif_eau:
         manque_eau = (objectif_eau - conso_jour["eau"]) / 1000
-        advice += f" Il vous manque environ {manque_eau:.1f}L d'eau."
+        advice += f"Il vous manque environ {manque_eau:.1f}L d'eau."
     else:
         advice += " Hydratation parfaite !"
 
