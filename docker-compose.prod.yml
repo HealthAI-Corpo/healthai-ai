@@ -9,15 +9,11 @@ services:
     environment:
       - VISION_SERVICE_URL=http://healthai-vision:8001
       - WORKOUT_SERVICE_URL=http://healthai-workout:8002
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    env_file:
-      - ./healthai-api/.env
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       healthai-vision:
         condition: service_healthy
       healthai-workout:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     networks:
       - internal
@@ -27,12 +23,10 @@ services:
     image: ghcr.io/healthai-corpo/healthai-vision:latest
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URL=${MONGODB_URL}
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache
-    env_file:
-      - ./healthai-vision/.env
     volumes:
       - hf_cache:/app/.hf_cache
     healthcheck:
@@ -41,9 +35,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - internal
 
@@ -52,60 +43,18 @@ services:
     image: ghcr.io/healthai-corpo/healthai-workout:latest
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - MONGODB_URL=mongodb://mongo:27017
-    env_file:
-      - ./healthai-workout/.env
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URL=${MONGODB_URL}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-    networks:
-      - internal
-
-  # --- POSTGRES ---
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-healthai}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthai}
-      POSTGRES_DB: ${POSTGRES_DB:-healthai_db}
-    volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d:ro
-      - pg-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-healthai}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal
-
-  # --- MONGO ---
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - internal
 
 volumes:
-  pg-data:
-  mongo-data:
   hf_cache:
 
 networks:
