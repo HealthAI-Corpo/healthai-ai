@@ -1,27 +1,24 @@
-FROM python:3.12-slim
+# ── Builder ───────────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --frozen
+
+# ── Runner ────────────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS runner
 
 WORKDIR /app
 
-# Dépendances système minimales
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Installation de uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Installation des dépendances via lockfile
-COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --frozen
-
-# Copie du code source
+COPY --from=builder /app/.venv ./.venv
 COPY src/ ./src/
 
-# Variables d'environnement pour Python
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 EXPOSE 8000
-
-# Lancement via uv pour garantir l'usage du venv synchronisé
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
