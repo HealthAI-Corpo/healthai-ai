@@ -1,10 +1,12 @@
 from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
+
 
 async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
     # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
@@ -20,7 +22,7 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
 
     # 2. Calcul des besoins (Sécurité sur le poids qui peut être None en base)
     poids_actuel = float(profil.poids_kg or 70.0)
-    
+
     facteur_activite = 1.2
     if profil.niveau_activite == "Modéré":
         facteur_activite = 1.4
@@ -57,10 +59,12 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         if reste_cal < 0:
             advice = f"Quota perte de poids atteint ({int(conso_jour['cal'])} kcal). "
         elif conso_jour["glu"] > limite_glucides:
-            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
+            advice = (
+                f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
+            )
         else:
             advice = f"Belle progression ! Marge : {int(reste_cal)} kcal. "
-            
+
     elif "masse" in (profil.objectif_principal or "").lower():
         advice = f"Bonne gestion de votre masse. Reste {int(reste_cal)} kcal. "
     else:
