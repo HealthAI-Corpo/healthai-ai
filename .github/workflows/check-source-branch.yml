@@ -1,0 +1,20 @@
+name: Check source branch
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-source:
+    name: Source branch must be develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR comes from develop
+        run: |
+          if [[ "${{ github.head_ref }}" != "develop" ]]; then
+            echo "❌ PRs to main must come from develop (got: ${{ github.head_ref }})"
+            exit 1
+          fi
