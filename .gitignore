@@ -41,3 +41,7 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Données d'entraînement de l'IA d'estimation de calories brûlées
+healthai-training-ia-calories-estimation/data/models/*
+healthai-training-ia-calories-estimation/data/raw/*
