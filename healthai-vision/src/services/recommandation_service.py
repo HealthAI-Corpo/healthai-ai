@@ -12,7 +12,7 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
     # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
     result = await db_sql.execute(
         select(ProfilSante)
-        .join(Utilisateur, Utilisateur.id_profil_sante == ProfilSante.id_profil_sante)
+        .join(Utilisateur, Utilisateur.id_utilisateur == ProfilSante.id_utilisateur)
         .where(Utilisateur.id_utilisateur == user_id)
     )
     profil = result.scalar_one_or_none()
