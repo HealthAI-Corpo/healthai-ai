@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -6,11 +7,12 @@ from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
 
+
 async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
     # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
     result = await db_sql.execute(
         select(ProfilSante)
-        .join(Utilisateur, Utilisateur.id_utilisateur == ProfilSante.id_utilisateur)
+        .join(Utilisateur, Utilisateur.id_profil_sante == ProfilSante.id_profil_sante)
         .where(Utilisateur.id_utilisateur == user_id)
     )
     profil = result.scalar_one_or_none()
@@ -20,7 +22,7 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
 
     # 2. Calcul des besoins (Sécurité sur le poids qui peut être None en base)
     poids_actuel = float(profil.poids_kg or 70.0)
-    
+
     facteur_activite = 1.2
     if profil.niveau_activite == "Modéré":
         facteur_activite = 1.4
@@ -28,7 +30,6 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         facteur_activite = 1.6
 
     besoin_calorique_base = poids_actuel * 30 * facteur_activite
-    cible_proteines = poids_actuel * 1.5
 
     # 3. Récupération MongoDB (Inchangé)
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -48,7 +49,6 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         besoin_final = besoin_calorique_base - 500
 
     reste_cal = besoin_final - conso_jour["cal"]
-    manque_prot = cible_proteines - conso_jour["prot"]
 
     # 5. Génération du message
     advice = ""
@@ -57,10 +57,11 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         if reste_cal < 0:
             advice = f"Quota perte de poids atteint ({int(conso_jour['cal'])} kcal). "
         elif conso_jour["glu"] > limite_glucides:
-            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
+            glu = int(conso_jour["glu"])
+            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({glu}g). "
         else:
             advice = f"Belle progression ! Marge : {int(reste_cal)} kcal. "
-            
+
     elif "masse" in (profil.objectif_principal or "").lower():
         advice = f"Bonne gestion de votre masse. Reste {int(reste_cal)} kcal. "
     else:

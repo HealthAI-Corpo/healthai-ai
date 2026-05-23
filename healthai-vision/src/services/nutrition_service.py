@@ -1,4 +1,5 @@
 from sqlalchemy import func, select
+
 from src.models.aliment import Aliment
 
 # Mapping stratégique inchangé
@@ -24,6 +25,7 @@ FOOD_MAPPING = {
     "spoon": None,
 }
 
+
 async def enrich_with_nutrition(detections, db_session):
     final_results = []
     for item in detections:
@@ -45,7 +47,7 @@ async def enrich_with_nutrition(detections, db_session):
         if aliment_data:
             item.update(
                 {
-                    "id_aliment": aliment_data.id_aliment, # Champ Infra
+                    "id_aliment": aliment_data.id_aliment,  # Champ Infra
                     "display_name": aliment_data.nom,
                     "nutrition": {
                         "calories": float(aliment_data.calories or 0.0),

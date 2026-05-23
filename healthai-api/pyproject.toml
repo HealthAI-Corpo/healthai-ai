@@ -12,3 +12,8 @@ dependencies = [
     "strawberry-graphql[fastapi]>=0.315.3",
     "uvicorn>=0.46.0",
 ]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.7.0",
+]
