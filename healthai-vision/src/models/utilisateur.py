@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, Column, Date, Integer, String, text
 
 from src.database import Base
 

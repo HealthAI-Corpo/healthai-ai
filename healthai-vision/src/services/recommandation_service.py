@@ -30,7 +30,6 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         facteur_activite = 1.6
 
     besoin_calorique_base = poids_actuel * 30 * facteur_activite
-    cible_proteines = poids_actuel * 1.5
 
     # 3. Récupération MongoDB (Inchangé)
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -50,7 +49,6 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         besoin_final = besoin_calorique_base - 500
 
     reste_cal = besoin_final - conso_jour["cal"]
-    manque_prot = cible_proteines - conso_jour["prot"]
 
     # 5. Génération du message
     advice = ""
