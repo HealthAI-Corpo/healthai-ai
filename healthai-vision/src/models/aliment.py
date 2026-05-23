@@ -1,5 +1,7 @@
-from sqlalchemy import Column, Integer, String, Numeric
-from src.database import Base  
+from sqlalchemy import Column, Integer, Numeric, String
+
+from src.database import Base
+
 
 class Aliment(Base):
     __tablename__ = "aliment"
