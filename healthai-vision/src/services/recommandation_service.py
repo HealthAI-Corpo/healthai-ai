@@ -57,9 +57,8 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         if reste_cal < 0:
             advice = f"Quota perte de poids atteint ({int(conso_jour['cal'])} kcal). "
         elif conso_jour["glu"] > limite_glucides:
-            advice = (
-                f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
-            )
+            glu = int(conso_jour["glu"])
+            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({glu}g). "
         else:
             advice = f"Belle progression ! Marge : {int(reste_cal)} kcal. "
 
