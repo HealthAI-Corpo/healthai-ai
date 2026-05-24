@@ -38,6 +38,11 @@ async def test_recommendation_weight_loss():
         # Appel du service
         advice = await generate_nutritional_advice(user_id=1, db_sql=mock_db)
 
-        assert "kcal" in advice
+        assert "analyse_macros" in advice
+
+        # On extrait le texte de l'analyse pour vérifier son contenu
+        analyse_texte = advice["analyse_macros"]
+
+        assert "kcal" in analyse_texte
         # Vérifie que le déficit est bien pris en compte (80*30*1.4 - 500 = 2860)
-        assert "2860" in advice
+        assert "2860" in analyse_texte
