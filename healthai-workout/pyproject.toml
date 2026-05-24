@@ -50,6 +50,12 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# Prompts LLM dans des strings multi-lignes — découpage non pertinent
+"src/services/workout_generation.py" = ["E501"]
+# Messages d'erreur métier détaillés
+"src/services/calorie_service.py" = ["E501"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

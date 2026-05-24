@@ -73,6 +73,7 @@ services:
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
     volumes:
       - ./healthai-workout/src:/app/src
+      - ./healthai-workout/models:/app/models
     command:
       [
         "uv",
