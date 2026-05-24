@@ -1,5 +1,9 @@
+import json
+import os
 from datetime import datetime
 
+# Import de ta bibliothèque partagée commune
+from healthai_common.llm import generate_llm_prediction
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -7,9 +11,13 @@ from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
 
+# Configuration des variables d'environnement pour Ollama
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 
-async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
-    # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
+
+async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession) -> dict:
+    # 1. Récupérer le profil santé (Inchangé)
     result = await db_sql.execute(
         select(ProfilSante)
         .join(Utilisateur, Utilisateur.id_utilisateur == ProfilSante.id_utilisateur)

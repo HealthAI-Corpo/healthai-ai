@@ -1,13 +1,18 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
+from os import getenv  # Pour récupérer dynamiquement les variables d'environnement
 
+import httpx  # Ajout de l'import pour le ping rapide
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from src.database import AsyncSessionLocal
 from src.database_mongo import mongo_db
 from src.services.ai_service import ai_service
 from src.services.nutrition_service import enrich_with_nutrition
-from src.services.recommandation_service import generate_nutritional_advice  # Nouvel import
+from src.services.recommandation_service import generate_nutritional_advice
+
+# Configuration d'Ollama (Récupère les variables du .env local ou prend les valeurs de dev)
+OLLAMA_BASE_URL = getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
 
 
 @asynccontextmanager
@@ -22,11 +27,21 @@ app = FastAPI(title="HealthAI Vision Service", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
+    # Ping asynchrone ultra rapide en local pour vérifier si le conteneur Ollama répond
+    ollama_online = False
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        try:
+            response = await client.get(f"{OLLAMA_BASE_URL}/")
+            ollama_online = response.status_code == 200 and "Ollama is running" in response.text
+        except Exception:
+            ollama_online = False
+
     return {
         "status": "online",
         "service": "healthai-vision",
         "model_loaded": ai_service.model is not None,
         "mongodb_connected": mongo_db.db is not None,
+        "ollama_connected": ollama_online,  # <-- Ta nouvelle métrique de validation !
     }
 
 
