@@ -1,31 +1,33 @@
-# ── Builder ───────────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-WORKDIR /app
-
-COPY pyproject.toml uv.lock* ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen
-
-# ── Runner ────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runner
-
-# Dépendances runtime OpenCV (libgl1 / libglib2.0-0 nécessaires au runner)
+# 1. Installation des dépendances système nécessaires pour OpenCV et le compilateur
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 \
+    gcc \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# 2. Installation de UV globalement dans l'image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 WORKDIR /app
 
-COPY --from=builder /app/.venv ./.venv
-COPY src/ ./src/
+# 3. Injection de la bibliothèque partagée (Chemin absolu simulé dans Docker)
+COPY healthai-common /healthai-common
+
+# 4. Injection des fichiers de configuration de la Vision
+COPY healthai-vision/pyproject.toml healthai-vision/uv.lock* ./
+
+# 5. Synchronisation UV standard (SANS CACHE ET SANS --FROZEN pour éviter les conflits de lock Windows/Linux)
+RUN uv sync --no-dev
+
+# 6. Copie du code source du micro-service
+COPY healthai-vision/src/ ./src/
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
 EXPOSE 8001
-CMD ["uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8001"]
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]

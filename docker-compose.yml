@@ -6,10 +6,8 @@ services:
       - "8000:8000"
     env_file:
       - ./healthai-api/.env
-    # Montage du dossier src local vers le dossier app dans le conteneur
     volumes:
       - ./healthai-api/src:/app/src
-    # Force le rechargement automatique du serveur au changement de code
     command:
       [
         "uv",
@@ -31,39 +29,37 @@ services:
 
   # --- SERVICE VISION ---
   healthai-vision:
-    build: ./healthai-vision
+    build:
+      context: .
+      dockerfile: ./healthai-vision/Dockerfile
+    init: true
     ports:
       - "${HEALTHAI_VISION_PORT:-8001}:8001"
     env_file:
       - ./healthai-vision/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache
-    command:
-      [
-        "uv",
-        "run",
-        "uvicorn",
-        "src.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8001",
-        "--reload",
-      ]
     depends_on:
       - postgres
+      - mongo
+      - ollama
     networks:
       - internal
 
   # --- SERVICE WORKOUT ---
   healthai-workout:
-    build: ./healthai-workout
+    build:
+      context: .
+      dockerfile: ./healthai-workout/Dockerfile
+    init: true
     ports:
       - "${HEALTHAI_WORKOUT_PORT:-8002}:8002"
     env_file:
@@ -71,26 +67,17 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
     volumes:
       - ./healthai-workout/src:/app/src
-    command:
-      [
-        "uv",
-        "run",
-        "uvicorn",
-        "src.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8002",
-        "--reload",
-      ]
     depends_on:
       - postgres
       - mongo
+      - ollama
     networks:
       - internal
 
+  # --- BASE DE DONNÉES NOSQL ---
   mongo:
     image: mongo:7
     ports:
@@ -100,25 +87,53 @@ services:
     networks:
       - internal
 
+  # --- BASE DE DONNÉES RELATIONNELLE ---
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: healthai
-      POSTGRES_PASSWORD: healthai
-      POSTGRES_DB: healthai_db
+      POSTGRES_USER: ${POSTGRES_USER:-healthai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthai}
+      POSTGRES_DB: ${POSTGRES_DB:-healthai_db}
     ports:
       - "5433:5432"
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d:ro
-      - pg-data:/var/lib/postgresql/data #
+      - pg-data:/var/lib/postgresql/data
     networks:
       - internal
+
+  # --- SERVICE LLM CENTRALISÉ ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - internal
+    command: ["serve"]
+
+  # --- TÉLÉCHARGEMENT AUTOMATIQUE DU MODÈLE SLM ---
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama-pull
+    networks:
+      - internal
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_storage:/root/.ollama
+    entrypoint: /bin/sh
+    command: -c "sleep 5 && ollama pull llama3.2:3b"
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   mongo-data:
   pg-data:
   hf_cache:
-
-networks:
-  internal:
-    driver: bridge
+  ollama_storage:
