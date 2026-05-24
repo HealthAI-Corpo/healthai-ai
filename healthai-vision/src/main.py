@@ -41,7 +41,7 @@ async def health():
         "service": "healthai-vision",
         "model_loaded": ai_service.model is not None,
         "mongodb_connected": mongo_db.db is not None,
-        "ollama_connected": ollama_online,  # <-- Ta nouvelle métrique de validation !
+        "ollama_connected": ollama_online,
     }
 
 
@@ -86,18 +86,18 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
                 conseil = await generate_nutritional_advice(int(user_id), db)
 
             elif len(enriched_results) > 0 and not (has_food or has_water):
+                # Cas où on détecte un objet (ex: bowl) mais qui ne contient rien de connu
                 conseil = (
-                    "Objet reconnu (contenant), "
-                    "mais le contenu alimentaire n'a pas pu être identifié"
-                    "pour calculer vos apports."
+                    "Objet reconnu (contenant), mais le contenu alimentaire "
+                    "n'a pas pu être identifié pour calculer vos apports."
                 )
 
             else:
+                # Cas où YOLO ne voit rien du tout
                 conseil = (
-                    "Aucun aliment reconnu."
-                    "Essayez de prendre une photo plus claire ou de plus près."
+                    "Aucun aliment reconnu. Essayez de prendre une "
+                    "photo plus claire ou de plus près."
                 )
-
         # 4. Sauvegarde dans MongoDB (Historique)
         consumption_doc = {
             "user_id": user_id,

@@ -618,6 +618,12 @@ dependencies = [
 [package.metadata]
 requires-dist = [{ name = "httpx", specifier = ">=0.27.0" }]
 
+<<<<<<< HEAD
+=======
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.15.14" }]
+
+>>>>>>> chore/Olama-config
 [[package]]
 name = "healthai-vision"
 version = "0.1.0"

@@ -11,6 +11,7 @@ jobs:
   check-source:
     name: Source branch must be develop
     runs-on: ubuntu-latest
+    if: github.base_ref == 'main'
     steps:
       - name: Verify PR comes from develop
         run: |
