@@ -11,8 +11,10 @@ from loguru import logger
 from src.core.config import settings
 from src.database_mongo import mongo_db
 from src.routers.calorie_estimation import router as calorie_router
+from src.routers.recommendations import router as recommendations_router
 from src.routers.sessions import router as sessions_router
 from src.services.calorie_service import CalorieService
+from src.services.recommendation_service import load_recommendation_service
 
 
 def _load_artifact(path: Path):
@@ -50,6 +52,12 @@ async def lifespan(app: FastAPI):
     features = metadata.get("features_cols_order", [])
     logger.info("CalorieService initialisé — {} features: {}", len(features), ", ".join(features))
 
+    try:
+        app.state.recommendation_service = load_recommendation_service(base_dir / "models")
+    except FileNotFoundError as e:
+        logger.warning("RecommendationService non chargé (modèle manquant) : {}", e)
+        app.state.recommendation_service = None
+
     yield
 
     mongo_db.close()
@@ -59,6 +67,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="HealthAI Workout Service", version="1.0.0", lifespan=lifespan)
 app.include_router(sessions_router)
 app.include_router(calorie_router)
+app.include_router(recommendations_router)
 
 
 @app.get("/")
