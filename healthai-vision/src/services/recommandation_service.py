@@ -1,5 +1,7 @@
+import os
 from datetime import datetime
 
+# Import de ta bibliothèque partagée commune
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -7,9 +9,13 @@ from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
 
+# Configuration des variables d'environnement pour Ollama
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 
-async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
-    # 1. Récupérer le profil santé (Jointure corrigée selon schéma Infra)
+
+async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession) -> dict:
+    # 1. Récupérer le profil santé (Inchangé)
     result = await db_sql.execute(
         select(ProfilSante)
         .join(Utilisateur, Utilisateur.id_utilisateur == ProfilSante.id_utilisateur)
@@ -57,8 +63,9 @@ async def generate_nutritional_advice(user_id: int, db_sql: AsyncSession):
         if reste_cal < 0:
             advice = f"Quota perte de poids atteint ({int(conso_jour['cal'])} kcal). "
         elif conso_jour["glu"] > limite_glucides:
-            glu = int(conso_jour["glu"])
-            advice = f"Reste {int(reste_cal)} kcal. Attention aux glucides ({glu}g). "
+            advice = (
+                f"Reste {int(reste_cal)} kcal. Attention aux glucides ({int(conso_jour['glu'])}g). "
+            )
         else:
             advice = f"Belle progression ! Marge : {int(reste_cal)} kcal. "
 
