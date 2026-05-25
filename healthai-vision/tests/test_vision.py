@@ -1,10 +1,5 @@
 """
-TEST D'INTÉGRATION : Flux complet et Sécurité
-Ce fichier regroupe les tests de robustesse du service de vision :
-1. test_analyze_endpoint_complete_flow : Vérifie que le JSON final contient
-   toutes les données attendues (Detections, Totaux, Eau, Recommandations).
-2. test_analyze_invalid_file : Vérifie que le système rejette proprement
-   les fichiers dangereux ou invalides (ex: un .txt à la place d'une image).
+TEST D'INTÉGRATION : Flux de vision et Sécurité
 """
 
 import io
@@ -32,23 +27,21 @@ async def test_analyze_endpoint_complete_flow():
     assert response.status_code == 200
     data = response.json()
 
-    # Vérification de la présence des 3 piliers de la réponse HealthAI
+    # Vérification des piliers après découplage
     assert "detections" in data
     assert "total_repas" in data
-    assert "recommandation" in data
+    assert "consumption_id" in data  # 🌟 Crucial pour le polling asynchrone
 
-    # Vérification spécifique du suivi d'hydratation (nouvelle fonctionnalité)
+    # Vérification spécifique du suivi d'hydratation
     assert "eau_ml" in data["total_repas"]
 
 
 @pytest.mark.asyncio
 async def test_analyze_invalid_file():
-    # Simulation d'une erreur utilisateur : envoi d'un fichier texte
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         files = {"file": ("test.txt", b"not an image", "text/plain")}
         response = await ac.post("/analyze", files=files)
 
-    # Le système doit répondre par une erreur 400 (Bad Request)
     assert response.status_code == 400
     assert "Format de fichier non supporté" in response.json()["detail"]

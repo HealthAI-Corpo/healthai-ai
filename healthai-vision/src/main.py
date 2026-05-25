@@ -1,17 +1,19 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from os import getenv  # Pour récupérer dynamiquement les variables d'environnement
+from os import getenv
 
 import httpx  # Ajout de l'import pour le ping rapide
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from bson import ObjectId
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from src.database import AsyncSessionLocal
 from src.database_mongo import mongo_db
 from src.services.ai_service import ai_service
 from src.services.nutrition_service import enrich_with_nutrition
-from src.services.recommandation_service import generate_nutritional_advice
+from src.services.recommandation_service import generate_nutritional_advice_from_db
+from src.services.suggestion_service import suggest_meal_from_db
 
-# Configuration d'Ollama (Récupère les variables du .env local ou prend les valeurs de dev)
 OLLAMA_BASE_URL = getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
 
 
@@ -41,8 +43,11 @@ async def health():
         "service": "healthai-vision",
         "model_loaded": ai_service.model is not None,
         "mongodb_connected": mongo_db.db is not None,
-        "ollama_connected": ollama_online,  # <-- Ta nouvelle métrique de validation !
+        "ollama_connected": ollama_online,
     }
+
+
+# 1. ROUTE D'ANALYSE INSTANTANÉE (YOLO + POSTGRES)
 
 
 @app.post("/analyze")
@@ -53,10 +58,9 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
     try:
         image_bytes = await file.read()
 
-        # 1. IA (YOLO)
+        # 1. IA (YOLO) - Ultra rapide
         raw_results = ai_service.analyze_image(image_bytes)
 
-        # 2. Traitement SQL & Recommandation
         async with AsyncSessionLocal() as db:
             # Enrichissement calories/protéines via Postgres
             enriched_results = await enrich_with_nutrition(raw_results, db)
@@ -78,26 +82,7 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
                 "eau_ml": sum(item.get("nutrition", {}).get("eau", 0) for item in enriched_results),
             }
 
-        # 3. Logique de Recommandation Intelligente
-        # On vérifie si on a des calories OU si l'un des aliments détectés est de l'eau
-        has_food = total_repas["calories"] > 0
-        has_water = any(item.get("display_name") == "Water" for item in enriched_results)
-
-        if len(enriched_results) > 0 and (has_food or has_water):
-            # Maintenant, si c'est de l'eau, on entre ici !
-            conseil = await generate_nutritional_advice(int(user_id), db)
-
-        elif len(enriched_results) > 0 and not (has_food or has_water):
-            # Cas où on détecte un objet (ex: bowl) mais qui ne contient rien de connu
-            conseil = "Objet reconnu (contenant), mais le contenu alimentaire n'a pas pu être identifié pour calculer vos apports."
-
-        else:
-            # Cas où YOLO ne voit rien du tout
-            conseil = (
-                "Aucun aliment reconnu. Essayez de prendre une photo plus claire ou de plus près."
-            )
-
-        # 4. Sauvegarde dans MongoDB (Historique)
+        # 2. Sauvegarde immédiate dans MongoDB (Historique)
         consumption_doc = {
             "user_id": user_id,
             "timestamp": datetime.utcnow(),
@@ -105,19 +90,198 @@ async def analyze_meal(file: UploadFile = File(...), user_id: str = "1"):
             "details": enriched_results,
         }
 
+        inserted_id = None
         if mongo_db.db is not None:
-            await mongo_db.db.consumptions.insert_one(consumption_doc)
+            result_mongo = await mongo_db.db.consumptions.insert_one(consumption_doc)
+            inserted_id = str(result_mongo.inserted_id)  # On récupère l'ID du repas stocké
 
-        # 5. Réponse finale
+        # 3. Réponse finale instantanée pour le Front
         return {
             "filename": file.filename,
             "user_id": user_id,
+            # Utile pour que le front puisse demander le conseil sur CE repas précis
+            "consumption_id": inserted_id,
             "count": len(enriched_results),
             "total_repas": total_repas,
-            "recommandation": conseil,
             "detections": enriched_results,
         }
 
     except Exception as e:
-        print(f"Erreur CRITIQUE : {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors de l'analyse : {str(e)}")
+
+
+# ==============================================
+# Partie Recommandation Nutritionnelle
+# ==============================================
+
+
+class AdviceRequest(BaseModel):
+    user_id: int
+    consumption_id: str | None = None  # Optionnel : ID du repas qui vient d'être scanné
+
+
+async def run_ollama_in_background(user_id: int, consumption_id: str):
+    """
+    Cette fonction s'exécute de manière invisible en tâche de fond.
+    Elle prend son temps (1 minute s'il le faut), puis enregistre le JSON final dans Mongo.
+    """
+    # 1. On ouvre une session de base de données SQL propre à ce thread de fond
+    async with AsyncSessionLocal() as db_sql:
+        try:
+            # 2. On appelle ton service de recommandation (avec ton nouveau schéma simplifié)
+            conseil_ia = await generate_nutritional_advice_from_db(
+                user_id=user_id, db_sql=db_sql, consumption_id=consumption_id
+            )
+
+            # 3. Une fois qu'Ollama a fini, on injecte dans MongoDB
+            await mongo_db.db.consumptions.update_one(
+                {"_id": ObjectId(consumption_id)}, {"$set": {"recommandation_ia": conseil_ia}}
+            )
+            print(f"[Tâche de fond] Conseils IA enregistrés pour {consumption_id}")
+
+        except Exception as e:
+            # En tâche de fond, on ne peut pas faire de "raise HTTPException".
+            # On logge l'erreur ou on l'écrit dans Mongo pour le debug.
+            print(f" [Tâche de fond] Erreur lors du calcul Ollama : {str(e)}")
+            await mongo_db.db.consumptions.update_one(
+                {"_id": ObjectId(consumption_id)},
+                {
+                    "$set": {
+                        "recommandation_ia": {
+                            "error": "L'IA n'a pas pu générer de conseils.",
+                            "debug": str(e),
+                        }
+                    }
+                },
+            )
+
+
+# ROUTE DE RECOMMANDATION NUTRITIONNELLE
+
+
+@app.post("/nutrition/ai/advice")
+async def get_nutritional_advice_endpoint(
+    payload: AdviceRequest, background_tasks: BackgroundTasks
+):
+    """
+    Route immédiate : elle lance le calcul en tâche de fond et répond
+    directement au Front-end sans bloquer l'utilisateur.
+    """
+    if not payload.consumption_id:
+        raise HTTPException(
+            status_code=400,
+            detail="L'ID du repas (consumption_id) est obligatoire pour cette stratégie.",
+        )
+
+    # On ajoute la lourde tâche Ollama en tâche de fond
+    background_tasks.add_task(
+        run_ollama_in_background, user_id=payload.user_id, consumption_id=payload.consumption_id
+    )
+
+    # Réponse INSTANTANÉE pour le front
+    return {
+        "status": "processing",
+        "message": "L'IA génère vos conseils personnalisés en tâche de fond.",
+        "consumption_id": payload.consumption_id,
+    }
+
+
+#  ROUTE DE VERIFICATION RECO (POLLING POUR LE FRONT)
+
+
+@app.get("/nutrition/consumption/{consumption_id}")
+async def get_consumption_status(consumption_id: str):
+    """
+    Le Front-end appelle cette route toutes les 5 ou 10 secondes.
+    Dès que la clé 'recommandation_ia' apparaît, le Front affiche les conseils.
+    """
+    try:
+        doc = await mongo_db.db.consumptions.find_one({"_id": ObjectId(consumption_id)})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Repas introuvable.")
+
+        # On vérifie si l'IA a fini d'écrire son résultat
+        advice = doc.get("recommandation_ia")
+
+        return {
+            "consumption_id": consumption_id,
+            "status": "completed" if advice else "processing",
+            "total_repas": doc.get("summary"),
+            "detections": doc.get("details"),
+            "recommandation_ia": advice,  # Sera null tant qu'Ollama n'a pas fini
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================
+# Partie Suggestion repas
+# ==============================================
+class SuggestMealRequest(BaseModel):
+    user_id: int
+
+
+# Fonction exécutée en tâche de fond pour la suggestion de repas
+async def run_meal_suggestion_in_background(user_id: int, suggestion_id: str):
+    async with AsyncSessionLocal() as db_sql:
+        try:
+            # On appelle la logique métier (qu'on va ajouter au service juste après)
+            suggestion_json = await suggest_meal_from_db(user_id=user_id, db_sql=db_sql)
+
+            await mongo_db.db.suggestions.update_one(
+                {"_id": ObjectId(suggestion_id)},
+                {"$set": {"status": "completed", "suggestion": suggestion_json}},
+            )
+            print(f"[Tâche de fond] Suggestion de repas enregistrée pour {suggestion_id}")
+        except Exception as e:
+            print(f"[Tâche de fond] Erreur lors de la suggestion : {str(e)}")
+            await mongo_db.db.suggestions.update_one(
+                {"_id": ObjectId(suggestion_id)}, {"$set": {"status": "failed", "error": str(e)}}
+            )
+
+
+# ROUTE : SUGGÉRER UN REPAS (ASYNCHRONE)
+
+
+@app.post("/nutrition/ai/suggest-meal")
+async def suggest_meal_endpoint(payload: SuggestMealRequest, background_tasks: BackgroundTasks):
+    """Lance la génération d'une recette sur-mesure en tâche de fond."""
+    # 1. Préparation du document temporaire dans MongoDB
+    new_suggestion = {
+        "user_id": str(payload.user_id),
+        "timestamp": datetime.utcnow(),
+        "status": "processing",
+        "suggestion": None,
+    }
+    result = await mongo_db.db.suggestions.insert_one(new_suggestion)
+    suggestion_id = str(result.inserted_id)
+
+    # 2. On délègue le travail lourd à la tâche de fond
+    background_tasks.add_task(
+        run_meal_suggestion_in_background, user_id=payload.user_id, suggestion_id=suggestion_id
+    )
+
+    return {
+        "status": "processing",
+        "message": "L'IA concocte votre recette personnalisée...",
+        "suggestion_id": suggestion_id,
+    }
+
+
+# ROUTE : RÉCUPÉRER LA SUGGESTION (POLLING)
+
+
+@app.get("/nutrition/suggestion/{suggestion_id}")
+async def get_suggestion_status(suggestion_id: str):
+    """Le Front appelle cette route pour afficher la recette dès qu'elle est prête."""
+    try:
+        doc = await mongo_db.db.suggestions.find_one({"_id": ObjectId(suggestion_id)})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Suggestion introuvable.")
+        return {
+            "suggestion_id": suggestion_id,
+            "status": doc.get("status"),
+            "resultat": doc.get("suggestion"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

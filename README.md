@@ -48,6 +48,21 @@ healthai-ai/
 │ ├── Dockerfile # Build avec Scikit-learn & Pandas
 │ └── pyproject.toml # Dépendances (Sklearn, Motor, Asyncpg)
 │
+├── healthai-training-ia-calories-estimation/ # Entraînement modèles calories
+│ ├── data/
+│ │ ├── raw/ # Données brutes (CSV historique séances)
+│ │ └── models/ # Modèles entraînés versionnés (v1_x, v2_x...)
+│ ├── src/
+│ │ ├── data_loading.py # Chargement et validation CSV
+│ │ ├── preprocessing.py # Normalisation, encoding, split
+│ │ ├── model_training.py # Entraînement RF + Gradient Boosting
+│ │ ├── model_evaluation.py # Calcul métriques (R², MAE, RMSE, MAPE)
+│ │ └── model_serialization.py # Sauvegarde versionnée
+│ ├── config.py # Paramètres centralisés (hyperparamètres, seuils)
+│ ├── main.py # Orchestration pipeline complet
+│ ├── README.md # Documentation d'utilisation
+│ └── pyproject.toml # Dépendances (Pandas, Scikit-learn, Joblib)
+│
 ├── docker-compose.yml # Orchestration (API + Vision + Workout + DBs)
 └── .gitignore # Exclusion des .env, .venv et caches IA
 ```
