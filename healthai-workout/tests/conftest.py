@@ -10,6 +10,7 @@ pour couvrir les tests d'endpoints qui l'utilisent via Depends.
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.main import app
 from src.services.calorie_service import CalorieService
@@ -66,3 +67,9 @@ def mock_calorie_service():
     # Nettoyage minimal — evite les fuites entre sessions pytest
     if hasattr(app.state, "calorie_service"):
         del app.state.calorie_service
+
+
+@pytest.fixture
+def client():
+    """TestClient sans context manager : la lifespan (modèle réel, Mongo) n'est pas déclenchée."""
+    return TestClient(app)

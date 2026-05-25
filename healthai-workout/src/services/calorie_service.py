@@ -61,8 +61,11 @@ class CalorieService:
             raise HTTPException(status_code=422, detail="; ".join(errors))
 
     def _encode_categorical_features(self, data: dict) -> dict:
+        # Les valeurs catégorielles fournies sont des chaînes (M/F, Cardio...) à encoder.
+        # Si elles sont déjà numériques, c'est qu'elles ont été imputées (moyenne du
+        # dataset sur la colonne encodée) : on les laisse telles quelles.
         encoded = data.copy()
-        if "sexe" in encoded:
+        if isinstance(encoded.get("sexe"), str):
             sexe_encoders = self.encoders.get("sexe", {})
             sexe_value = encoded["sexe"].strip()
             if sexe_value not in sexe_encoders:
@@ -72,7 +75,7 @@ class CalorieService:
                 )
             encoded["sexe"] = sexe_encoders[sexe_value]
 
-        if "type_sport" in encoded:
+        if isinstance(encoded.get("type_sport"), str):
             sport_encoders = self.encoders.get("type_sport", {})
             sport_value = encoded["type_sport"].strip()
             if sport_value not in sport_encoders:

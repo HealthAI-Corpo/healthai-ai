@@ -41,6 +41,7 @@ async def get_model_info(
 
 @router.get("/metrics", response_model=MetricsResponse)
 async def get_metrics() -> MetricsResponse:
+    # TODO : recup de healthai-workout\models\CaloriesIA_1_0_0\random_forest\metrics.json
     return MetricsResponse(
         r2_score=0.1751498562391377,
         mae=200.38720793270784,
