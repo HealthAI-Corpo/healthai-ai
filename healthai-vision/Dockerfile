@@ -21,7 +21,7 @@ COPY healthai-vision/pyproject.toml healthai-vision/uv.lock* ./
 # 5. Synchronisation UV avec cache persistant (Finit les téléchargements de 8 minutes !)
 # On monte un cache Docker dédié à UV et on ajoute un timeout réseau de sécurité
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --timeout 600
+    uv sync --no-dev 
 
 # 6. Copie du code source du micro-service
 COPY healthai-vision/src/ ./src/
