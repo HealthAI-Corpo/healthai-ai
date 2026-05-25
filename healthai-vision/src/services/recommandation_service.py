@@ -7,6 +7,7 @@ from healthai_common.llm import generate_llm_prediction
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from src.database import AsyncSessionLocal
 from src.database_mongo import mongo_db
 from src.models.profilsante import ProfilSante
 from src.models.utilisateur import Utilisateur
@@ -133,3 +134,41 @@ Format obligatoire :
             "alerte_eau": "N'oubliez pas de boire régulièrement.",
             "debug_error": str(e),
         }
+
+
+async def run_ollama_in_background(user_id: int, consumption_id: str):
+    """
+    Exécuté en tâche de fond. Génère le conseil nutritionnel
+    via Ollama et l'enregistre dans le document de consommation Mongo.
+    """
+    if mongo_db.db is None:
+        print("[Tâche de fond] Erreur : MongoDB non connecté.")
+        return
+
+    # On ouvre une session de base de données SQL propre à ce thread de fond
+    async with AsyncSessionLocal() as db_sql:
+        try:
+            # Appel de ta fonction existante
+            conseil_ia = await generate_nutritional_advice_from_db(
+                user_id=user_id, db_sql=db_sql, consumption_id=consumption_id
+            )
+
+            # Une fois qu'Ollama a fini, on injecte dans MongoDB
+            await mongo_db.db.consumptions.update_one(
+                {"_id": ObjectId(consumption_id)}, {"$set": {"recommandation_ia": conseil_ia}}
+            )
+            print(f"[Tâche de fond] Conseils IA enregistrés pour le repas {consumption_id}")
+
+        except Exception as e:
+            print(f"[Tâche de fond] Erreur lors du calcul Ollama Recommandation : {str(e)}")
+            await mongo_db.db.consumptions.update_one(
+                {"_id": ObjectId(consumption_id)},
+                {
+                    "$set": {
+                        "recommandation_ia": {
+                            "error": "L'IA n'a pas pu générer de conseils.",
+                            "debug": str(e),
+                        }
+                    }
+                },
+            )
