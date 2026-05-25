@@ -1,3 +1,7 @@
+# Identique au docker-compose.yml commun, SAUF la base PostgreSQL :
+# ici on n'embarque PAS de Postgres. On se branche sur la DB de healthai-infra
+# qui tourne en local et contient déjà les données de test, via host.docker.internal:5432.
+# Tout le reste (vision, workout, gateway, mongo, ollama) est identique au compose commun.
 services:
   # --- GATEWAY PRINCIPALE ---
   healthai-api:
@@ -8,10 +12,9 @@ services:
       - ./healthai-api/.env
     volumes:
       - ./healthai-api/src:/app/src
+    # uvicorn est sur le PATH via le venv (/app/.venv/bin) ; l'image runner ne contient pas `uv`.
     command:
       [
-        "uv",
-        "run",
         "uvicorn",
         "src.main:app",
         "--host",
@@ -23,7 +26,6 @@ services:
     depends_on:
       - healthai-vision
       - healthai-workout
-      - postgres
     networks:
       - internal
 
@@ -38,17 +40,20 @@ services:
     env_file:
       - ./healthai-vision/.env
     environment:
+      # DB = infra locale (données de test) atteinte via l'hôte
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:3f76fa376bff2705a0216cda224680ff95e0a4d5fb9953dfc8050034034518e6@host.docker.internal:5432/healthai_db}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
       - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache
     depends_on:
-      - postgres
       - mongo
       - ollama
     networks:
@@ -65,14 +70,16 @@ services:
     env_file:
       - ./healthai-workout/.env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db}
+      # DB = infra locale (données de test) atteinte via l'hôte
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:3f76fa376bff2705a0216cda224680ff95e0a4d5fb9953dfc8050034034518e6@host.docker.internal:5432/healthai_db}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./healthai-workout/src:/app/src
     depends_on:
-      - postgres
       - mongo
       - ollama
     networks:
@@ -88,20 +95,8 @@ services:
     networks:
       - internal
 
-  # --- BASE DE DONNÉES RELATIONNELLE ---
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-healthai}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthai}
-      POSTGRES_DB: ${POSTGRES_DB:-healthai_db}
-    ports:
-      - "5433:5432"
-    volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d:ro
-      - pg-data:/var/lib/postgresql/data
-    networks:
-      - internal
+  # NB : pas de service `postgres` ici — on utilise la DB de healthai-infra
+  # (host.docker.internal:5432) qui contient déjà les données de test.
 
   # --- SERVICE LLM CENTRALISÉ ---
   ollama:
@@ -139,6 +134,5 @@ networks:
 
 volumes:
   mongo-data:
-  pg-data:
   hf_cache:
   ollama_storage:

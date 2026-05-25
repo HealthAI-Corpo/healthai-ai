@@ -100,11 +100,21 @@ Format obligatoire :
   "conseils_sante": "Met ici un conseil concret pour son hydratation et son prochain repas."
 }
 """
+        nutrition_schema = {
+            "type": "object",
+            "properties": {
+                "bilan_macros": {"type": "string"},
+                "conseils_sante": {"type": "string"},
+            },
+            "required": ["bilan_macros", "conseils_sante"],
+        }
         llm_raw_result = await generate_llm_prediction(
             base_url=OLLAMA_BASE_URL,
             model_name=OLLAMA_MODEL,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            response_format=nutrition_schema,
+            options={"temperature": 0.1, "num_predict": 120, "num_threads": 4},
         )
 
         if isinstance(llm_raw_result, dict):

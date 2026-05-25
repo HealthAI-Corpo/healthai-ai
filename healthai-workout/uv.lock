@@ -324,6 +324,20 @@ wheels = [
 ]
 
 [[package]]
+name = "healthai-common"
+version = "0.1.0"
+source = { directory = "../healthai-common" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.27.0" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.15.14" }]
+
+[[package]]
 name = "healthai-workout"
 version = "0.1.0"
 source = { editable = "." }
@@ -331,6 +345,7 @@ dependencies = [
     { name = "aio-pika" },
     { name = "asyncpg" },
     { name = "fastapi" },
+    { name = "healthai-common" },
     { name = "httpx" },
     { name = "joblib" },
     { name = "loguru" },
@@ -369,6 +384,7 @@ requires-dist = [
     { name = "aio-pika", specifier = ">=9.6.2" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "healthai-common", directory = "../healthai-common" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
     { name = "joblib", specifier = ">=1.4.0" },

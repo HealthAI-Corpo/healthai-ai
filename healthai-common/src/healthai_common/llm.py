@@ -1,35 +1,32 @@
 import json
+
 import httpx
 
 
 async def generate_llm_prediction(
-    base_url: str, model_name: str, system_prompt: str, user_prompt: str
+    base_url: str,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    response_format: str | dict = "json",
+    options: dict | None = None,
 ) -> dict:
-    """Envoie les prompts à Ollama, gère les temps de charge CPU et force un retour au format JSON strict."""
+    """Client Ollama générique : envoie les prompts et force un retour JSON.
+
+    response_format : "json" (souple, défaut) ou un schéma JSON strict (dict) pour
+    contraindre la structure de sortie. options : paramètres Ollama (temperature,
+    num_predict, num_threads...). Gère les temps de charge CPU (timeout 180 s).
+    """
     url = f"{base_url}/api/generate"
-    
-    # DÉFINIT LE SCHÉMA STRICT 
-    json_schema = {
-    "type": "object",
-    "properties": {
-        "bilan_macros": {"type": "string"},     
-        "conseils_sante": {"type": "string"}     
-    },
-    "required": ["bilan_macros", "conseils_sante"]
-}
 
     payload = {
         "model": model_name,
         "prompt": f"System: {system_prompt}\nUser: {user_prompt}",
-        "format": json_schema,
+        "format": response_format,
         "stream": False,
-        "options": {
-            "temperature": 0.1,  
-            "num_predict": 120,    
-            "num_threads": 4
-        }
     }
-
+    if options:
+        payload["options"] = options
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         response = await client.post(url, json=payload)
@@ -48,24 +45,18 @@ async def generate_llm_prediction(
             raw_text = "\n".join(lines).strip()
 
         try:
-            data = json.loads(raw_text)
-            # Valide le schéma JSON
-            for key in json_schema["required"]:
-                if key not in data:
-                    raise ValueError(f"Clé manquante dans la réponse LLM : {key}")
-            return data
+            return json.loads(raw_text)
         except json.JSONDecodeError as e:
-            # Si le parsing échoue, on lève une erreur claire pour les logs de vision
+            # Si le parsing échoue, on lève une erreur claire pour les logs appelants
             raise ValueError(
                 f"Le LLM n'a pas renvoyé un JSON valide. Texte brut reçu : {raw_text}"
             ) from e
+
 
 async def generate_meal_suggestion(
     base_url: str, model_name: str, system_prompt: str, user_prompt: str
 ) -> dict:
     """Force Qwen à générer une suggestion de repas avec un schéma JSON strict."""
-    import httpx
-    import json
     url = f"{base_url}/api/generate"
 
     recipe_schema = {
@@ -74,9 +65,9 @@ async def generate_meal_suggestion(
             "titre_repas": {"type": "string"},
             "estimation_calories": {"type": "string"},
             "ingredients": {"type": "string"},
-            "instructions": {"type": "string"}
+            "instructions": {"type": "string"},
         },
-        "required": ["titre_repas", "estimation_calories", "ingredients", "instructions"]
+        "required": ["titre_repas", "estimation_calories", "ingredients", "instructions"],
     }
 
     payload = {
@@ -87,8 +78,8 @@ async def generate_meal_suggestion(
         "options": {
             "temperature": 0.3,
             "num_predict": 180,
-            "num_thread": 4
-        }
+            "num_thread": 4,
+        },
     }
 
     async with httpx.AsyncClient(timeout=180.0) as client:

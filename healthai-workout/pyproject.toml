@@ -25,6 +25,8 @@ dependencies = [
     "aio-pika>=9.6.2",
     "strawberry-graphql[fastapi]>=0.315.3",
     "pydantic-settings>=2.14.0",
+    # Bibliothèque partagée (client LLM Ollama commun à workout et vision)
+    "healthai-common",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,15 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# Prompts LLM dans des strings multi-lignes — découpage non pertinent
+"src/services/workout_generation.py" = ["E501"]
+"src/services/recommendation_service.py" = ["E501"]
+# Messages d'erreur métier détaillés
+"src/services/calorie_service.py" = ["E501"]
+"src/services/calorie_from_session_service.py" = ["E501"]
+"src/routers/recommendations.py" = ["E501"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
@@ -62,3 +73,6 @@ dev-dependencies = [
     "pytest-cov>=5.0.0",
     "httpx>=0.27.0",
 ]
+
+[tool.uv.sources]
+healthai-common = { path = "../healthai-common" }

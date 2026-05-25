@@ -1,0 +1,70 @@
+{
+  "features": [
+    "age",
+    "imc",
+    "bpm_repos",
+    "niveau_experience",
+    "frequence_sport_jour_semaine"
+  ],
+  "labels": [
+    "type_seance",
+    "intensite",
+    "muscle_chest",
+    "muscle_back",
+    "muscle_legs",
+    "muscle_shoulders",
+    "muscle_core",
+    "muscle_arms"
+  ],
+  "type_seance_classes": [
+    "cardio",
+    "force",
+    "mixte",
+    "mobilité"
+  ],
+  "intensite_classes": [
+    "faible",
+    "modérée",
+    "élevée"
+  ],
+  "muscles": [
+    "chest",
+    "back",
+    "legs",
+    "shoulders",
+    "core",
+    "arms"
+  ],
+  "muscle_map": {
+    "Strength": [
+      "chest",
+      "back",
+      "shoulders",
+      "arms"
+    ],
+    "Cardio": [
+      "legs",
+      "core"
+    ],
+    "HIIT": [
+      "legs",
+      "core",
+      "arms"
+    ],
+    "Yoga": [
+      "core"
+    ]
+  },
+  "type_map": {
+    "Cardio": "cardio",
+    "HIIT": "mixte",
+    "Strength": "force",
+    "Yoga": "mobilité"
+  },
+  "n_samples_train": 1963,
+  "n_samples_test": 491,
+  "f1_macro_type_seance": 0.2205,
+  "f1_macro_intensite": 0.315,
+  "cv_f1_macro_mean": 0.2478,
+  "cv_f1_macro_std": 0.018
+}
