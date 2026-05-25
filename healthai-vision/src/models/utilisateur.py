@@ -18,7 +18,7 @@ class Utilisateur(Base):
     type_abonnement = Column(String(50), server_default="Freemium")
     date_inscription = Column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
-    id_profil_sante = Column(Integer, ForeignKey("profil_sante.id_profil_sante"))
+    id_profil_sante = Column(Integer, ForeignKey("profil_sante.id_profil"))
 
     # SQLAlchemy fera le lien automatiquement grâce à l'import en haut
-    profil = relationship("ProfilSante")
+    profil = relationship("ProfilSante", foreign_keys=[id_profil_sante])

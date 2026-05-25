@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class DataLoadingError(Exception):
     """Exception levée lors du chargement des données"""
+
     pass
 
 
@@ -46,19 +47,23 @@ def load_raw_data(filepath: str | Path) -> pd.DataFrame:
             logger.error(f"❌ {error_msg}")
             raise DataLoadingError(error_msg)
 
-        logger.info(f"✅ Données chargées : {df.shape[0]} lignes, {df.shape[1]} colonnes")
+        logger.info(
+            f"✅ Données chargées : {df.shape[0]} lignes, {df.shape[1]} colonnes"
+        )
         return df
 
     except pd.errors.ParserError as e:
         error_msg = f"Erreur de parsing CSV (format invalide) : {str(e)}"
         logger.error(f"❌ {error_msg}")
         raise DataLoadingError(error_msg) from e
-    
+
     except DataLoadingError:
         # Re-lever les DataLoadingError comme-is
         raise
-    
+
     except Exception as e:
-        error_msg = f"Erreur inattendue lors du chargement CSV : {type(e).__name__} - {str(e)}"
+        error_msg = (
+            f"Erreur inattendue lors du chargement CSV : {type(e).__name__} - {str(e)}"
+        )
         logger.error(f"❌ {error_msg}")
         raise DataLoadingError(error_msg) from e

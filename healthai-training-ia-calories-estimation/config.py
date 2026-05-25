@@ -27,23 +27,23 @@ CSV_FILE = DATA_RAW_DIR / "dataset_historique_seance_exercice.20260519.csv"
 # Colonnes attendues avec leurs types
 SCHEMA = {
     "age": "int64",
-    "sexe": "str",                          # M, F
+    "sexe": "str",  # M, F
     # PHASE 6 MOD: Fusion poids + taille → IMC
-    "poids_kg": "float64",                  # Transformé en IMC
-    "taille_cm": "int64",                   # Transformé en IMC
+    "poids_kg": "float64",  # Transformé en IMC
+    "taille_cm": "int64",  # Transformé en IMC
     "bpm_max": "int64",
     "bpm_moyen": "int64",
     "bpm_repos": "int64",
     "duree_seance_minutes": "float64",
-    "calories_brulees": "float64",          # TARGET
-    "type_sport": "str",                    # Texte
+    "calories_brulees": "float64",  # TARGET
+    "type_sport": "str",  # Texte
     "pourcentage_gras": "float64",
     "consommation_eau_ml": "float64",
     # PHASE 6 MOD: Suppression de frequence_sport_jour_semaine
     # Raison: 1) Importance marginale (4-5%), 2) Redondant avec durée/BPM,
     #         3) Variable de profil utilisateur, pas de séance actuelle
     # "frequence_sport_jour_semaine": "int64",  # REMOVED
-    "niveau_experience": "int64",           # 1-5
+    "niveau_experience": "int64",  # 1-5
 }
 
 # Colonnes à garder (toutes sauf certaines optionnelles)
@@ -54,15 +54,23 @@ TARGET_COL = "calories_brulees"
 CATEGORICAL_COLS = {
     "sexe": {
         # Accepter plusieurs variantes
-        "M": 0, "m": 0, "male": 0, "Male": 0,
-        "F": 1, "f": 1, "female": 1, "Female": 1,
+        "M": 0,
+        "m": 0,
+        "male": 0,
+        "Male": 0,
+        "F": 1,
+        "f": 1,
+        "female": 1,
+        "Female": 1,
     },
     # Au lieu de one-hot (2 colonnes), une seule colonne: 0=Cardio, 1=Force
     # Cardio: Cardio + HIIT (effort cardio-vasculaire)
     # Force: Strength + Yoga (effort musculaire/flexibilité)
     "type_sport": {
-        "Cardio": 0, "HIIT": 0,
-        "Strength": 1, "Yoga": 1,
+        "Cardio": 0,
+        "HIIT": 0,
+        "Strength": 1,
+        "Yoga": 1,
     },
 }
 
@@ -75,12 +83,12 @@ TRAIN_TEST_SPLIT_RATIO = 0.8
 RANDOM_STATE = 42
 
 # Normalisation
-NORMALIZE_NUMERIC = True          # StandardScaler
-SCALING_METHOD = "standard"       # "standard" ou "minmax"
+NORMALIZE_NUMERIC = True  # StandardScaler
+SCALING_METHOD = "standard"  # "standard" ou "minmax"
 
 # Valeurs manquantes
-DROP_MISSING = True               # True : supprimer les lignes avec NaN
-FILL_MISSING = False              # True : remplir avec la moyenne/médiane
+DROP_MISSING = True  # True : supprimer les lignes avec NaN
+FILL_MISSING = False  # True : remplir avec la moyenne/médiane
 
 # ============================================================================
 # PARAMETRES DES MODELES
@@ -91,10 +99,10 @@ FILL_MISSING = False              # True : remplir avec la moyenne/médiane
 # Ancien (v1_11): n_est=100, max_depth=15, min_split=5, min_leaf=2
 # Nouveau (v1_12+): Plus conservatif pour meilleure généralisation
 RF_PARAMS = {
-    "n_estimators": 150,        # Augmenté de 100 → 150 (stabilité ensemble)
-    "max_depth": 12,            # Réduit de 15 → 12 (moins d'overfitting)
-    "min_samples_split": 10,    # Augmenté de 5 → 10 (arbres moins spécialisés)
-    "min_samples_leaf": 4,      # Augmenté de 2 → 4 (feuilles plus générales)
+    "n_estimators": 150,  # Augmenté de 100 → 150 (stabilité ensemble)
+    "max_depth": 12,  # Réduit de 15 → 12 (moins d'overfitting)
+    "min_samples_split": 10,  # Augmenté de 5 → 10 (arbres moins spécialisés)
+    "min_samples_leaf": 4,  # Augmenté de 2 → 4 (feuilles plus générales)
     "random_state": RANDOM_STATE,
     "n_jobs": -1,
 }
@@ -120,7 +128,7 @@ GB_PARAMS = {
 #       bon: >= seuil_bon
 #       moyen: >= seuil_moyen
 #       mauvais: < seuil_moyen
-#   
+#
 #   - Métriques où Plus Bas = Meilleur (MAE, RMSE, MSE, MAPE, etc):
 #       bon: <= seuil_bon
 #       moyen: <= seuil_moyen
@@ -180,4 +188,3 @@ MODEL_NAME = "CaloriesPOC"
 # Format final : v{VERSION_MAJOR}_x_<timestamp>
 # Exemple : v1_1_20260521_143022 (v1 = version_major, 1 = x auto-incrémenté, timestamp = date/heure)
 VERSION_MAJOR = "1"
-
