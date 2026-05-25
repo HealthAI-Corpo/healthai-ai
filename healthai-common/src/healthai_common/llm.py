@@ -7,33 +7,30 @@ async def generate_llm_prediction(
 ) -> dict:
     """Envoie les prompts à Ollama, gère les temps de charge CPU et force un retour au format JSON strict."""
     url = f"{base_url}/api/generate"
-
-    # DÉFINIT LE SCHÉMA STRICT
+    
+    # DÉFINIT LE SCHÉMA STRICT 
     json_schema = {
-        "type": "object",
-        "properties": {
-            "statut_motivation": {"type": "string"},
-            "analyse_macros": {"type": "string"},
-            "recommandation_repas": {"type": "string"},
-            "alerte_eau": {"type": "string"},
-        },
-        "required": [
-            "statut_motivation",
-            "analyse_macros",
-            "recommandation_repas",
-            "alerte_eau",
-        ],
-    }
+    "type": "object",
+    "properties": {
+        "bilan_macros": {"type": "string"},     
+        "conseils_sante": {"type": "string"}     
+    },
+    "required": ["bilan_macros", "conseils_sante"]
+}
 
     payload = {
         "model": model_name,
         "prompt": f"System: {system_prompt}\nUser: {user_prompt}",
         "format": json_schema,
         "stream": False,
-        "options": {"temperature": 0.1, "num_predict": 120, "num_threads": 4},
+        "options": {
+            "temperature": 0.1,  
+            "num_predict": 120,    
+            "num_threads": 4
+        }
     }
 
-    #  Augmenté à 180s (3 minutes) pour laisser le temps au CPU de charger le runner sans couper
+
     async with httpx.AsyncClient(timeout=180.0) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
@@ -62,3 +59,41 @@ async def generate_llm_prediction(
             raise ValueError(
                 f"Le LLM n'a pas renvoyé un JSON valide. Texte brut reçu : {raw_text}"
             ) from e
+
+async def generate_meal_suggestion(
+    base_url: str, model_name: str, system_prompt: str, user_prompt: str
+) -> dict:
+    """Force Qwen à générer une suggestion de repas avec un schéma JSON strict."""
+    import httpx
+    import json
+    url = f"{base_url}/api/generate"
+
+    recipe_schema = {
+        "type": "object",
+        "properties": {
+            "titre_repas": {"type": "string"},
+            "estimation_calories": {"type": "string"},
+            "ingredients": {"type": "string"},
+            "instructions": {"type": "string"}
+        },
+        "required": ["titre_repas", "estimation_calories", "ingredients", "instructions"]
+    }
+
+    payload = {
+        "model": model_name,
+        "prompt": f"System: {system_prompt}\nUser: {user_prompt}",
+        "format": recipe_schema,
+        "stream": False,
+        "options": {
+            "temperature": 0.3,
+            "num_predict": 180,
+            "num_thread": 4
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        raw_text = result.get("response", "").strip()
+        return json.loads(raw_text)
