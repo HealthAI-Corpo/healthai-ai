@@ -10,7 +10,7 @@ from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
     r2_score,
-    median_absolute_error
+    median_absolute_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,12 +18,14 @@ logger = logging.getLogger(__name__)
 
 class EvaluationError(Exception):
     """Exception levée lors de l'évaluation des modèles"""
+
     pass
 
 
 # ============================================================================
 # 1. EVALUATION D'UN SEUL MODELE
 # ============================================================================
+
 
 def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
     """
@@ -80,11 +82,9 @@ def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
         median_ae = median_absolute_error(y_test, y_pred)
 
         # Feature Importance
-        if hasattr(model, 'feature_importances_'):
+        if hasattr(model, "feature_importances_"):
             feature_names = X_test.columns.tolist()
-            feature_importance = dict(
-                zip(feature_names, model.feature_importances_)
-            )
+            feature_importance = dict(zip(feature_names, model.feature_importances_))
             # Trier par importance décroissante
             feature_importance = dict(
                 sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
@@ -108,7 +108,9 @@ def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
     except EvaluationError:
         raise
     except Exception as e:
-        error_msg = f"Erreur lors de l'évaluation du modèle: {type(e).__name__} - {str(e)}"
+        error_msg = (
+            f"Erreur lors de l'évaluation du modèle: {type(e).__name__} - {str(e)}"
+        )
         logger.error(f"❌ {error_msg}")
         raise EvaluationError(error_msg) from e
 
@@ -116,6 +118,7 @@ def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
 # ============================================================================
 # 2. EVALUATION DE LA QUALITE DES METRIQUES (BON/MOYEN/MAUVAIS)
 # ============================================================================
+
 
 def evaluate_metrics(metrics_dict: dict, thresholds: dict) -> dict:
     """
@@ -126,7 +129,7 @@ def evaluate_metrics(metrics_dict: dict, thresholds: dict) -> dict:
       * bon: >= seuil_bon
       * moyen: >= seuil_moyen
       * mauvais: < seuil_moyen
-    
+
     - Métriques où Plus Bas = Meilleur (MAE, RMSE, MSE, MAPE, etc):
       * bon: <= seuil_bon
       * moyen: <= seuil_moyen
@@ -187,7 +190,9 @@ def evaluate_metrics(metrics_dict: dict, thresholds: dict) -> dict:
         }
 
     except Exception as e:
-        error_msg = f"Erreur lors de l'évaluation de la qualité: {type(e).__name__} - {str(e)}"
+        error_msg = (
+            f"Erreur lors de l'évaluation de la qualité: {type(e).__name__} - {str(e)}"
+        )
         logger.error(f"❌ {error_msg}")
         raise EvaluationError(error_msg) from e
 
@@ -196,11 +201,8 @@ def evaluate_metrics(metrics_dict: dict, thresholds: dict) -> dict:
 # 3. COMPARAISON DES MODELES (RF vs GB vs DummyRegressor)
 # ============================================================================
 
-def compare_models(
-    rf_metrics: dict,
-    gb_metrics: dict,
-    baseline_metrics: dict
-) -> dict:
+
+def compare_models(rf_metrics: dict, gb_metrics: dict, baseline_metrics: dict) -> dict:
     """
     Compare les 3 modèles (RF, GB, Baseline) sur toutes les métriques.
     Génère un classement 1-3 pour chaque métrique.
@@ -248,15 +250,17 @@ def compare_models(
             }
             # Trier par valeur décroissante (plus haut = meilleur = rang 1)
             ranked = sorted(r2_values.items(), key=lambda x: x[1], reverse=True)
-            rankings["r2"] = {
-                model: rank + 1 for rank, (model, _) in enumerate(ranked)
-            }
+            rankings["r2"] = {model: rank + 1 for rank, (model, _) in enumerate(ranked)}
             rankings["r2"]["winner"] = ranked[0][0]
             overall_scores[ranked[0][0]] += 1  # +1 pour le gagnant
 
         # ---- Métriques où Plus Bas = Meilleur ----
         for metric in lower_is_better:
-            if metric in rf_metrics and metric in gb_metrics and metric in baseline_metrics:
+            if (
+                metric in rf_metrics
+                and metric in gb_metrics
+                and metric in baseline_metrics
+            ):
                 metric_values = {
                     "random_forest": rf_metrics[metric],
                     "gradient_boosting": gb_metrics[metric],
@@ -282,6 +286,8 @@ def compare_models(
         }
 
     except Exception as e:
-        error_msg = f"Erreur lors de la comparaison des modèles: {type(e).__name__} - {str(e)}"
+        error_msg = (
+            f"Erreur lors de la comparaison des modèles: {type(e).__name__} - {str(e)}"
+        )
         logger.error(f"❌ {error_msg}")
         raise EvaluationError(error_msg) from e

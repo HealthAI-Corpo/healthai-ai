@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ModelTrainingError(Exception):
     """Exception levée lors de l'entraînement des modèles"""
+
     pass
 
 
@@ -20,10 +21,9 @@ class ModelTrainingError(Exception):
 # RANDOM FOREST REGRESSOR
 # ============================================================================
 
+
 def train_random_forest(
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    params: dict = None
+    X_train: pd.DataFrame, y_train: pd.Series, params: dict = None
 ) -> dict:
     """
     Entraîne un modèle Random Forest Regressor.
@@ -68,16 +68,16 @@ def train_random_forest(
                 "n_jobs": -1,
             }
 
-        logger.info(f"  Paramètres utilisés:")
+        logger.info("  Paramètres utilisés:")
         for key, value in params.items():
             logger.info(f"    {key}: {value}")
 
         # Entraînement
         start_time = time.time()
-        
+
         model = RandomForestRegressor(**params)
         model.fit(X_train, y_train)
-        
+
         training_time = time.time() - start_time
 
         logger.info(f"✅ Random Forest entraîné en {training_time:.2f}s")
@@ -103,10 +103,9 @@ def train_random_forest(
 # GRADIENT BOOSTING REGRESSOR
 # ============================================================================
 
+
 def train_gradient_boosting(
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    params: dict = None
+    X_train: pd.DataFrame, y_train: pd.Series, params: dict = None
 ) -> dict:
     """
     Entraîne un modèle Gradient Boosting Regressor.
@@ -151,16 +150,16 @@ def train_gradient_boosting(
                 "random_state": 42,
             }
 
-        logger.info(f"  Paramètres utilisés:")
+        logger.info("  Paramètres utilisés:")
         for key, value in params.items():
             logger.info(f"    {key}: {value}")
 
         # Entraînement
         start_time = time.time()
-        
+
         model = GradientBoostingRegressor(**params)
         model.fit(X_train, y_train)
-        
+
         training_time = time.time() - start_time
 
         logger.info(f"✅ Gradient Boosting entraîné en {training_time:.2f}s")

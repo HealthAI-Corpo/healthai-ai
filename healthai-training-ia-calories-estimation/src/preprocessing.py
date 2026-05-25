@@ -5,17 +5,16 @@ Responsable du nettoyage, feature engineering, encoding et normalisation
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
 
 class PreprocessingError(Exception):
     """Exception levée lors du prétraitement"""
+
     pass
 
 
@@ -23,9 +22,10 @@ class PreprocessingError(Exception):
 # 1. VALIDATION DES DONNEES
 # ============================================================================
 
+
 def validate_columns(df: pd.DataFrame, schema: dict) -> pd.DataFrame:
     """
-    Vérifie les colonnes et leurs types, puis retourne uniquement 
+    Vérifie les colonnes et leurs types, puis retourne uniquement
     les colonnes définies dans le schema.
 
     Args:
@@ -72,6 +72,7 @@ def validate_columns(df: pd.DataFrame, schema: dict) -> pd.DataFrame:
 # 1B. CALCUL DE L'IMC (PHASE 6 MOD)
 # ============================================================================
 
+
 def compute_imc(df: pd.DataFrame) -> pd.DataFrame:
     """
     PHASE 6 MOD: Calcule l'IMC à partir de poids_kg et taille_cm.
@@ -93,16 +94,20 @@ def compute_imc(df: pd.DataFrame) -> pd.DataFrame:
         # Vérifier qu'il n'y a pas de valeurs nulles
         if df[["poids_kg", "taille_cm"]].isnull().any().any():
             logger.error("❌ Valeurs nulles trouvées dans poids_kg ou taille_cm")
-            raise PreprocessingError("Impossible de calculer IMC avec des valeurs nulles")
+            raise PreprocessingError(
+                "Impossible de calculer IMC avec des valeurs nulles"
+            )
 
         # Calculer IMC = poids / (taille en mètres)²
         taille_m = df["taille_cm"] / 100.0
-        df["imc"] = df["poids_kg"] / (taille_m ** 2)
+        df["imc"] = df["poids_kg"] / (taille_m**2)
 
         # Supprimer les colonnes originales
         df = df.drop(["poids_kg", "taille_cm"], axis=1)
 
-        logger.info(f"  ✅ IMC calculé : min={df['imc'].min():.2f}, max={df['imc'].max():.2f}, mean={df['imc'].mean():.2f}")
+        logger.info(
+            f"  ✅ IMC calculé : min={df['imc'].min():.2f}, max={df['imc'].max():.2f}, mean={df['imc'].mean():.2f}"
+        )
         return df
     else:
         logger.warning("⚠️  poids_kg ou taille_cm manquants, IMC non calculé")
@@ -112,6 +117,7 @@ def compute_imc(df: pd.DataFrame) -> pd.DataFrame:
 # ============================================================================
 # 2. GESTION DES VALEURS MANQUANTES
 # ============================================================================
+
 
 def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -130,13 +136,9 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
         df = df.dropna()
         rows_after = len(df)
         rows_dropped = rows_before - rows_after
-        
-        logger.warning(
-            f"⚠️  {missing_count_before} valeurs manquantes détectées"
-        )
-        logger.info(
-            f"🗑️  {rows_dropped} lignes supprimées (restantes: {rows_after})"
-        )
+
+        logger.warning(f"⚠️  {missing_count_before} valeurs manquantes détectées")
+        logger.info(f"🗑️  {rows_dropped} lignes supprimées (restantes: {rows_after})")
     else:
         logger.info("✅ Pas de valeurs manquantes")
 
@@ -147,10 +149,11 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 # 3. ENCODING DES VARIABLES CATEGORIQUES
 # ============================================================================
 
+
 def encode_categorical(df: pd.DataFrame, categorical_mapping: dict) -> tuple:
     """
     Encode les colonnes catégoriques avec logiques spécifiques.
-    
+
     1. SEXE : Accepte M/m/male/Male → 0, F/f/female/Female → 1
              Vérifie qu'après encoding, il n'y a que des 0/1
     2. TYPE_SPORT : One-Hot Encoding (colonne binaire par sport)
@@ -170,25 +173,29 @@ def encode_categorical(df: pd.DataFrame, categorical_mapping: dict) -> tuple:
     # SEXE : Logique spécifique
     if "sexe" in df.columns:
         logger.info("  📊 Sexe: Normalisation (M/m/male→0, F/f/female→1)")
-        
+
         sexe_mapping = categorical_mapping.get("sexe", {})
-        
+
         # Appliquer le mapping
         df["sexe"] = df["sexe"].map(sexe_mapping)
-        
+
         # Vérifier les valeurs inconnues
         invalid_count = df["sexe"].isnull().sum()
         if invalid_count > 0:
-            logger.error(f"❌ {invalid_count} valeurs invalides pour 'sexe' détectées et supprimées")
+            logger.error(
+                f"❌ {invalid_count} valeurs invalides pour 'sexe' détectées et supprimées"
+            )
             df = df[df["sexe"].notna()]
-        
+
         # Vérifier qu'il n'y a que des 0 et 1
         unique_values = df["sexe"].unique()
         if not set(unique_values).issubset({0, 1}):
-            error_msg = f"Sexe contient des valeurs invalides après encoding : {unique_values}"
+            error_msg = (
+                f"Sexe contient des valeurs invalides après encoding : {unique_values}"
+            )
             logger.error(f"❌ {error_msg}")
             raise PreprocessingError(error_msg)
-        
+
         encoders_used["sexe"] = sexe_mapping
         logger.info(f"  ✅ Sexe encodé : {len(df)} lignes conservées")
 
@@ -204,7 +211,9 @@ def encode_categorical(df: pd.DataFrame, categorical_mapping: dict) -> tuple:
         # Vérifier les valeurs inconnues
         invalid_count = df["type_sport"].isnull().sum()
         if invalid_count > 0:
-            logger.error(f"❌ {invalid_count} valeurs invalides pour 'type_sport' détectées et supprimées")
+            logger.error(
+                f"❌ {invalid_count} valeurs invalides pour 'type_sport' détectées et supprimées"
+            )
             df = df[df["type_sport"].notna()]
 
         # Vérifier qu'il n'y a que des 0 et 1
@@ -215,7 +224,9 @@ def encode_categorical(df: pd.DataFrame, categorical_mapping: dict) -> tuple:
             raise PreprocessingError(error_msg)
 
         encoders_used["type_sport"] = sport_mapping
-        logger.info(f"  ✅ Type_sport encodé (0=Cardio, 1=Force) : {len(df)} lignes conservées")
+        logger.info(
+            f"  ✅ Type_sport encodé (0=Cardio, 1=Force) : {len(df)} lignes conservées"
+        )
 
     logger.info(f"✅ {len(encoders_used)} colonnes catégoriques encodées")
     return df, encoders_used
@@ -225,10 +236,9 @@ def encode_categorical(df: pd.DataFrame, categorical_mapping: dict) -> tuple:
 # 4. NORMALISATION DES DONNEES NUMERIQUES
 # ============================================================================
 
+
 def normalize_numeric(
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
-    method: str = "standard"
+    X_train: pd.DataFrame, X_test: pd.DataFrame, method: str = "standard"
 ) -> tuple:
     """
     Normalise les colonnes numériques.
@@ -265,12 +275,13 @@ def normalize_numeric(
 # 5. SPLIT TRAIN/TEST
 # ============================================================================
 
+
 def split_train_test(
     df: pd.DataFrame,
     target_col: str,
     features_cols: list,
     test_ratio: float = 0.2,
-    random_state: int = 42
+    random_state: int = 42,
 ) -> tuple:
     """
     Sépare les données en train/test.
@@ -285,15 +296,15 @@ def split_train_test(
     Returns:
         tuple: (X_train, X_test, y_train, y_test)
     """
-    logger.info(f"📊 Split train/test ({(1-test_ratio)*100:.0f}% / {test_ratio*100:.0f}%)...")
+    logger.info(
+        f"📊 Split train/test ({(1 - test_ratio) * 100:.0f}% / {test_ratio * 100:.0f}%)..."
+    )
 
     X = df[features_cols].copy()
     y = df[target_col].copy()
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=test_ratio,
-        random_state=random_state
+        X, y, test_size=test_ratio, random_state=random_state
     )
 
     logger.info(
@@ -309,6 +320,7 @@ def split_train_test(
 # 6. PIPELINE COMPLET DE PREPROCESSING
 # ============================================================================
 
+
 def fit_transform(
     df: pd.DataFrame,
     schema: dict,
@@ -318,11 +330,11 @@ def fit_transform(
     test_ratio: float = 0.2,
     random_state: int = 42,
     normalize: bool = True,
-    scaling_method: str = "standard"
+    scaling_method: str = "standard",
 ) -> dict:
     """
     Orchestre tout le preprocessing (Phase 1 complète).
-    
+
     Étapes :
     1. Validation des colonnes (stricte)
     2. Suppression des NaN (simple)
@@ -367,7 +379,9 @@ def fit_transform(
 
         # PHASE 6 MOD: Ajouter 'imc' si présent et pas déjà dans la liste
         if "imc" in df.columns and "imc" not in features_cols_updated:
-            features_cols_updated.insert(0, "imc")  # Insérer au début pour l'ordre cohérent
+            features_cols_updated.insert(
+                0, "imc"
+            )  # Insérer au début pour l'ordre cohérent
 
         # Ajouter les colonnes one-hot créées pour type_sport
         if encoders.get("type_sport", {}).get("method") == "onehot":
@@ -382,15 +396,14 @@ def fit_transform(
             target_col,
             features_cols_updated,
             test_ratio=test_ratio,
-            random_state=random_state
+            random_state=random_state,
         )
 
         # 6. Normalisation
         scaler = None
         if normalize:
             X_train, X_test, scaler = normalize_numeric(
-                X_train, X_test,
-                method=scaling_method
+                X_train, X_test, method=scaling_method
             )
 
         logger.info("=" * 70)
@@ -408,7 +421,7 @@ def fit_transform(
                 "train": len(X_train),
                 "test": len(X_test),
             },
-            "features_cols_final": features_cols_updated
+            "features_cols_final": features_cols_updated,
         }
 
     except PreprocessingError as e:
