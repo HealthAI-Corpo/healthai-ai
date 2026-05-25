@@ -166,9 +166,10 @@ Génère la séance idéale en respectant strictement le format JSON demandé.
 # --- evaluate-sessions ----------------------------------------------------------
 
 async def evaluate_sessions(db: AsyncSession, user_id: int, seances: list[dict]) -> dict:
+    # Pas d'historique récent ici : les séances à évaluer sont déjà fournies explicitement
+    # (et pour evaluate_recent_sessions elles SONT l'historique). L'ajouter ferait doublon.
     start = time.perf_counter()
     context = await _require_context(db, user_id)
-    historique = _format_historique(await get_recent_sessions(db, user_id))
 
     system_prompt = """
 Tu es un coach sportif expert de l'application HealthAI.
@@ -196,9 +197,6 @@ Profil de l'utilisateur :
 - Âge : {context.get('age')} ans, IMC : {context.get('imc')}
 - Objectif principal : {context.get('objectif_principal')}
 - Expérience sportive : {context.get('experience_sportive')}
-
-Historique récent :
-{historique}
 
 Séances à évaluer (JSON) :
 {json.dumps(seances, ensure_ascii=False)}

@@ -13,13 +13,13 @@ from pydantic import BaseModel, Field
 class ExerciceIn(BaseModel):
     """Exercice fourni en entrée : tout est optionnel sauf le nom."""
 
-    nom: str
-    type: str | None = None
+    nom: str = Field(..., max_length=200)
+    type: str | None = Field(None, max_length=50)
     series: int | None = None
     repetitions: int | None = None
     duree_secondes: int | None = None
     repos_secondes: int | None = None
-    muscles_cibles: str | None = None
+    muscles_cibles: str | None = Field(None, max_length=200)
 
 
 class ExerciceOut(BaseModel):
@@ -37,9 +37,9 @@ class ExerciceOut(BaseModel):
 # --- generate-session -----------------------------------------------------------
 
 class GenerateSessionRequest(BaseModel):
-    duree_souhaitee_minutes: int | None = Field(None, gt=0)
-    equipement_disponible: list[str] | None = None
-    focus_musculaire: str | None = None
+    duree_souhaitee_minutes: int | None = Field(None, gt=0, le=180)  # 3 h max
+    equipement_disponible: list[str] | None = Field(None, max_length=30)
+    focus_musculaire: str | None = Field(None, max_length=100)
 
 
 class GenerateSessionResponse(BaseModel):
@@ -63,7 +63,7 @@ class GenerateSessionResponse(BaseModel):
 
 class EvaluateSessionsRequest(BaseModel):
     # On évalue des séances déjà enregistrées : on ne transmet que leurs ids.
-    ids_seances: list[int] = Field(..., min_length=1)
+    ids_seances: list[int] = Field(..., min_length=1, max_length=20)
 
 
 class AvisSeance(BaseModel):
@@ -82,7 +82,7 @@ class EvaluateSessionsResponse(BaseModel):
 # --- explain-exercises ----------------------------------------------------------
 
 class ExplainExercisesRequest(BaseModel):
-    exercices: list[ExerciceIn] = Field(..., min_length=1)
+    exercices: list[ExerciceIn] = Field(..., min_length=1, max_length=20)
 
 
 class ExplicationExercice(BaseModel):

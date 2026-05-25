@@ -8,9 +8,9 @@ class WorkoutRecommendationRequest(BaseModel):
     niveau_experience: int = Field(default=1, ge=1, le=3)
     frequence_sport_jour_semaine: int = Field(default=3, ge=0, le=7)
     bpm_repos: int = Field(default=65, ge=30, le=120)
-    objectif: str = Field(default="Forme générale")
-    limitations: str = Field(default="Aucune")
-    historique_seances: list[str] = Field(default_factory=list)
+    objectif: str = Field(default="Forme générale", max_length=200)
+    limitations: str = Field(default="Aucune", max_length=500)
+    historique_seances: list[str] = Field(default_factory=list, max_length=50)
 
 
 class ClassifierPredictions(BaseModel):
