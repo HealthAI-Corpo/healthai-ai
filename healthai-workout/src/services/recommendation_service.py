@@ -7,6 +7,32 @@ from loguru import logger
 
 from src.services.llm_service import generate_llm_prediction
 
+# Schéma JSON envoyé à Ollama pour contraindre la séance produite (cf. system_prompt).
+_SEANCE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "titre": {"type": "string"},
+        "duree_minutes": {"type": "integer"},
+        "intensite": {"type": "string"},
+        "exercices": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nom": {"type": "string"},
+                    "muscles_cibles": {"type": "array", "items": {"type": "string"}},
+                    "series": {"type": "integer"},
+                    "repetitions": {"type": "string"},
+                    "repos_secondes": {"type": "integer"},
+                    "conseil": {"type": "string"},
+                },
+                "required": ["nom"],
+            },
+        },
+    },
+    "required": ["titre", "duree_minutes", "intensite", "exercices"],
+}
+
 
 class RecommendationService:
     def __init__(self, model, le_type, le_int, metadata: dict):
@@ -90,15 +116,15 @@ Format JSON attendu :
 
         user_prompt = f"""
 Profil de l'utilisateur :
-- Âge : {profile.get('age', '?')} ans
-- IMC : {round(float(profile.get('poids_kg', 70)) / (float(profile.get('taille_cm', 170)) / 100) ** 2, 1)}
-- Niveau d'expérience : {profile.get('niveau_experience', 1)}/3
-- Objectif : {profile.get('objectif', 'Non précisé')}
-- Restrictions : {profile.get('limitations', 'Aucune')}
+- Âge : {profile.get("age", "?")} ans
+- IMC : {round(float(profile.get("poids_kg", 70)) / (float(profile.get("taille_cm", 170)) / 100) ** 2, 1)}
+- Niveau d'expérience : {profile.get("niveau_experience", 1)}/3
+- Objectif : {profile.get("objectif", "Non précisé")}
+- Restrictions : {profile.get("limitations", "Aucune")}
 
 Recommandations du modèle IA :
-- Type de séance : {predictions['type_seance']}
-- Intensité recommandée : {predictions['intensite']}
+- Type de séance : {predictions["type_seance"]}
+- Intensité recommandée : {predictions["intensite"]}
 - Groupes musculaires à cibler : {muscles_str}
 
 Historique récent (éviter les mêmes groupes musculaires) :
@@ -107,7 +133,9 @@ Historique récent (éviter les mêmes groupes musculaires) :
 Génère une séance de 45 à 70 minutes respectant strictement le format JSON demandé.
 """
 
-        workout = await generate_llm_prediction(system_prompt=system_prompt, user_prompt=user_prompt)
+        workout = await generate_llm_prediction(
+            system_prompt=system_prompt, user_prompt=user_prompt, response_format=_SEANCE_SCHEMA
+        )
 
         return {
             "predictions_classifier": predictions,

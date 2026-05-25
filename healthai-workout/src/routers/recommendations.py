@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_db
+from src.schemas.ai_sessions import JobCreatedResponse
 from src.schemas.recommendation import WorkoutRecommendationResponse
+from src.services import job_service
 from src.services.context_service import build_recommendation_profile
+from src.services.job_service import require_mongo
 from src.services.recommendation_service import RecommendationService
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -21,38 +23,40 @@ def get_recommendation_service(request: Request) -> RecommendationService:
     return service
 
 
-@router.post("/workout", response_model=WorkoutRecommendationResponse)
-async def recommend_workout(
-    x_user_id: int = Header(..., alias="X-User-Id"),
-    service: RecommendationService = Depends(get_recommendation_service),
-    db: AsyncSession = Depends(get_db),
-) -> WorkoutRecommendationResponse:
-    """
-    Génère un programme d'entraînement personnalisé via le moteur hybride.
-
-    Entrée : header `X-User-Id` uniquement. Le profil (biométrie, objectif, limitations)
-    et l'historique récent des séances sont récupérés en base à partir de cet id.
-
-    Pipeline :
-    1. Classifier sklearn (RandomForest multi-output) prédit type, intensité et muscles cibles
-    2. LLM Ollama structure la séance complète à partir de ces prédictions
-
-    Sortie : `status`, les prédictions brutes du classifier, et la `seance` structurée par le LLM.
-    """
-    profile = await build_recommendation_profile(db, x_user_id)
+async def _recommend(db: AsyncSession, user_id: int, service: RecommendationService) -> dict:
+    """Travail de fond : profil depuis la base (404 si introuvable) → classifier → LLM."""
+    profile = await build_recommendation_profile(db, user_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-
-    try:
-        result = await service.generate(profile)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la génération : {e}",
-        ) from e
-
-    return WorkoutRecommendationResponse(
+    result = await service.generate(profile)
+    resp = WorkoutRecommendationResponse(
         status="success",
         predictions_classifier=result["predictions_classifier"],
         seance=result["seance"],
     )
+    return resp.model_dump()
+
+
+@router.post("/workout", response_model=JobCreatedResponse, status_code=202)
+async def recommend_workout(
+    background_tasks: BackgroundTasks,
+    x_user_id: int = Header(..., alias="X-User-Id"),
+    service: RecommendationService = Depends(get_recommendation_service),
+    _: None = Depends(require_mongo),
+) -> JobCreatedResponse:
+    """Génère un programme d'entraînement personnalisé (moteur hybride classifier + LLM).
+
+    Entrée : header `X-User-Id` uniquement ; le profil (biométrie, objectif, limitations)
+    et l'historique récent sont lus en base. L'appel Ollama étant lent, le travail tourne
+    en tâche de fond : récupère le job via GET /ai/jobs/{job_id}.
+
+    Le modèle de reco (503) est vérifié immédiatement ; l'utilisateur introuvable (404)
+    est reporté dans le job (status="failed", error_code=404).
+    """
+    job_id = await job_service.create_job("recommend-workout", x_user_id)
+    background_tasks.add_task(
+        job_service.run_in_background,
+        job_id,
+        lambda db: _recommend(db, x_user_id, service),
+    )
+    return JobCreatedResponse(job_id=job_id)

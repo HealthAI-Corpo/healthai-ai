@@ -37,7 +37,9 @@ def _calculer_age(naissance: date | None) -> int | None:
     if naissance is None:
         return None
     today = date.today()
-    return today.year - naissance.year - ((today.month, today.day) < (naissance.month, naissance.day))
+    return (
+        today.year - naissance.year - ((today.month, today.day) < (naissance.month, naissance.day))
+    )
 
 
 async def predict_from_session(
@@ -75,12 +77,16 @@ async def predict_from_session(
 
     # 3. Dernier relevé santé (bpm_repos, % gras)
     log_sante = (
-        await db.execute(
-            select(LogSante)
-            .where(LogSante.id_utilisateur == id_utilisateur)
-            .order_by(LogSante.date_log.desc())
+        (
+            await db.execute(
+                select(LogSante)
+                .where(LogSante.id_utilisateur == id_utilisateur)
+                .order_by(LogSante.date_log.desc())
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
     # 4. Calcul de l'IMC (profil sinon dérivé poids/taille)
     imc = float(profil.imc) if profil and profil.imc is not None else None

@@ -75,7 +75,97 @@ def _format_historique(sessions: list[dict]) -> str:
     )
 
 
+# --- Schémas JSON envoyés à Ollama (contraignent la structure de sortie) --------
+# On décrit uniquement les champs PRODUITS par le LLM (pas les champs serveur comme
+# id_seance_log). Ils reflètent le format documenté dans chaque system_prompt.
+
+_EXERCICE_PROPS = {
+    "nom": {"type": "string"},
+    "type": {"type": "string"},
+    "series": {"type": "integer"},
+    "repetitions": {"type": "integer"},
+    "duree_secondes": {"type": "integer"},
+    "repos_secondes": {"type": "integer"},
+    "muscles_cibles": {"type": "string"},
+}
+
+_GENERATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type_seance": {"type": "string"},
+        "titre_seance": {"type": "string"},
+        "duree_minutes": {"type": "integer"},
+        "difficulte": {"type": "string"},
+        "objectif": {"type": "string"},
+        "conseils_generaux": {"type": "string"},
+        "exercices": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": _EXERCICE_PROPS,
+                "required": ["nom"],
+            },
+        },
+    },
+    "required": [
+        "type_seance",
+        "titre_seance",
+        "duree_minutes",
+        "difficulte",
+        "objectif",
+        "conseils_generaux",
+        "exercices",
+    ],
+}
+
+_EVALUATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "avis_global": {"type": "string"},
+        "note_globale": {"type": "integer", "minimum": 1, "maximum": 5},
+        "avis_par_seance": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer"},
+                    "points_positifs": {"type": "array", "items": {"type": "string"}},
+                    "points_amelioration": {"type": "array", "items": {"type": "string"}},
+                    "suggestion": {"type": "string"},
+                },
+                "required": ["index"],
+            },
+        },
+    },
+    "required": ["avis_global", "note_globale", "avis_par_seance"],
+}
+
+_EXPLAIN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "explications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nom": {"type": "string"},
+                    "description": {"type": "string"},
+                    "muscles_cibles": {"type": "string"},
+                    "technique": {"type": "string"},
+                    "erreurs_courantes": {"type": "array", "items": {"type": "string"}},
+                    "variantes": {"type": "array", "items": {"type": "string"}},
+                    "conseils_securite": {"type": "string"},
+                },
+                "required": ["nom"],
+            },
+        },
+    },
+    "required": ["explications"],
+}
+
+
 # --- generate-session -----------------------------------------------------------
+
 
 async def generate_session(
     db: AsyncSession,
@@ -115,17 +205,17 @@ Format JSON attendu (tous les champs sont obligatoires, pas de null) :
 """
     user_prompt = f"""
 Profil de l'utilisateur :
-- Âge : {context.get('age')} ans, sexe : {context.get('sexe')}
-- IMC : {context.get('imc')}, niveau d'activité : {context.get('niveau_activite')}
-- Expérience sportive : {context.get('experience_sportive')}
-- Objectif principal : {context.get('objectif_principal')}
-- Fréquence d'entraînement : {context.get('frequence_entrainement')} séances/semaine
-- Santé : {context.get('type_maladie') or 'RAS'}
+- Âge : {context.get("age")} ans, sexe : {context.get("sexe")}
+- IMC : {context.get("imc")}, niveau d'activité : {context.get("niveau_activite")}
+- Expérience sportive : {context.get("experience_sportive")}
+- Objectif principal : {context.get("objectif_principal")}
+- Fréquence d'entraînement : {context.get("frequence_entrainement")} séances/semaine
+- Santé : {context.get("type_maladie") or "RAS"}
 
 Contraintes pour cette séance :
-- Durée souhaitée : {contraintes.get('duree_souhaitee_minutes') or 'libre'} minutes
-- Équipement disponible : {contraintes.get('equipement_disponible') or 'non précisé'}
-- Focus musculaire : {contraintes.get('focus_musculaire') or 'libre'}
+- Durée souhaitée : {contraintes.get("duree_souhaitee_minutes") or "libre"} minutes
+- Équipement disponible : {contraintes.get("equipement_disponible") or "non précisé"}
+- Focus musculaire : {contraintes.get("focus_musculaire") or "libre"}
 
 Historique récent (propose une séance complémentaire, évite de répéter le même focus) :
 {historique}
@@ -133,7 +223,9 @@ Historique récent (propose une séance complémentaire, évite de répéter le 
 Génère la séance idéale en respectant strictement le format JSON demandé.
 """
 
-    raw = await generate_llm_prediction(system_prompt=system_prompt, user_prompt=user_prompt)
+    raw = await generate_llm_prediction(
+        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_GENERATE_SCHEMA
+    )
     resp: GenerateSessionResponse = _validate_llm(raw, GenerateSessionResponse, "generate-session")
 
     result: dict[str, Any] = resp.model_dump()
@@ -165,6 +257,7 @@ Génère la séance idéale en respectant strictement le format JSON demandé.
 
 # --- evaluate-sessions ----------------------------------------------------------
 
+
 async def evaluate_sessions(db: AsyncSession, user_id: int, seances: list[dict]) -> dict:
     # Pas d'historique récent ici : les séances à évaluer sont déjà fournies explicitement
     # (et pour evaluate_recent_sessions elles SONT l'historique). L'ajouter ferait doublon.
@@ -194,9 +287,9 @@ Format JSON attendu :
 """
     user_prompt = f"""
 Profil de l'utilisateur :
-- Âge : {context.get('age')} ans, IMC : {context.get('imc')}
-- Objectif principal : {context.get('objectif_principal')}
-- Expérience sportive : {context.get('experience_sportive')}
+- Âge : {context.get("age")} ans, IMC : {context.get("imc")}
+- Objectif principal : {context.get("objectif_principal")}
+- Expérience sportive : {context.get("experience_sportive")}
 
 Séances à évaluer (JSON) :
 {json.dumps(seances, ensure_ascii=False)}
@@ -204,7 +297,9 @@ Séances à évaluer (JSON) :
 Évalue chaque séance et renvoie le JSON demandé.
 """
 
-    raw = await generate_llm_prediction(system_prompt=system_prompt, user_prompt=user_prompt)
+    raw = await generate_llm_prediction(
+        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_EVALUATE_SCHEMA
+    )
     resp = _validate_llm(raw, EvaluateSessionsResponse, "evaluate-sessions")
 
     await _trace_mongo(
@@ -287,6 +382,7 @@ async def evaluate_recent_sessions(db: AsyncSession, user_id: int) -> dict:
 
 # --- explain-exercises ----------------------------------------------------------
 
+
 async def explain_exercises(db: AsyncSession, user_id: int, exercices: list[dict]) -> dict:
     start = time.perf_counter()
     context = await _require_context(db, user_id)
@@ -313,8 +409,8 @@ Format JSON attendu :
 """
     user_prompt = f"""
 Profil de l'utilisateur (pour adapter le niveau d'explication) :
-- Expérience sportive : {context.get('experience_sportive')}
-- Santé : {context.get('type_maladie') or 'RAS'}
+- Expérience sportive : {context.get("experience_sportive")}
+- Santé : {context.get("type_maladie") or "RAS"}
 
 Exercices à expliquer (JSON) :
 {json.dumps(exercices, ensure_ascii=False)}
@@ -322,7 +418,9 @@ Exercices à expliquer (JSON) :
 Explique chaque exercice et renvoie le JSON demandé.
 """
 
-    raw = await generate_llm_prediction(system_prompt=system_prompt, user_prompt=user_prompt)
+    raw = await generate_llm_prediction(
+        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_EXPLAIN_SCHEMA
+    )
     resp = _validate_llm(raw, ExplainExercisesResponse, "explain-exercises")
 
     await _trace_mongo(

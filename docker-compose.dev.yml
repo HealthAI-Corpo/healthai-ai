@@ -44,7 +44,7 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:3f76fa376bff2705a0216cda224680ff95e0a4d5fb9953dfc8050034034518e6@host.docker.internal:5432/healthai_db}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
       - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache

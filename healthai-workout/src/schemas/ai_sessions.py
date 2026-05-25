@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 # --- Exercice (forme commune) ---------------------------------------------------
 
+
 class ExerciceIn(BaseModel):
     """Exercice fourni en entrée : tout est optionnel sauf le nom."""
 
@@ -36,6 +37,7 @@ class ExerciceOut(BaseModel):
 
 # --- generate-session -----------------------------------------------------------
 
+
 class GenerateSessionRequest(BaseModel):
     duree_souhaitee_minutes: int | None = Field(None, gt=0, le=180)  # 3 h max
     equipement_disponible: list[str] | None = Field(None, max_length=30)
@@ -61,6 +63,7 @@ class GenerateSessionResponse(BaseModel):
 
 # --- evaluate-sessions ----------------------------------------------------------
 
+
 class EvaluateSessionsRequest(BaseModel):
     # On évalue des séances déjà enregistrées : on ne transmet que leurs ids.
     ids_seances: list[int] = Field(..., min_length=1, max_length=20)
@@ -81,6 +84,7 @@ class EvaluateSessionsResponse(BaseModel):
 
 # --- explain-exercises ----------------------------------------------------------
 
+
 class ExplainExercisesRequest(BaseModel):
     exercices: list[ExerciceIn] = Field(..., min_length=1, max_length=20)
 
@@ -97,3 +101,26 @@ class ExplicationExercice(BaseModel):
 
 class ExplainExercisesResponse(BaseModel):
     explications: list[ExplicationExercice] = Field(..., min_length=1)
+
+
+# --- Jobs asynchrones (réponse immédiate + polling) -----------------------------
+
+
+class JobCreatedResponse(BaseModel):
+    """Réponse immédiate (202) : le travail Ollama tourne en tâche de fond."""
+
+    job_id: str
+    status: str = "processing"
+
+
+class JobStatusResponse(BaseModel):
+    """État d'un job IA, interrogé via GET /ai/jobs/{job_id}."""
+
+    job_id: str
+    type: str
+    status: str  # processing | completed | failed
+    result: dict | None = None
+    error: str | None = None
+    error_code: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

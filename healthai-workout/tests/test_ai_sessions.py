@@ -1,12 +1,19 @@
-"""Tests des endpoints /ai/* (LLM Ollama et contexte DB mockés)."""
+"""Tests des endpoints /ai/* en mode asynchrone (202 + polling).
+
+Les routes renvoient un job_id ; le travail Ollama tourne en BackgroundTask (exécutée
+par TestClient pendant l'appel POST). On interroge ensuite GET /ai/jobs/{id}.
+LLM Ollama, contexte DB et store Mongo sont mockés.
+"""
 
 from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from bson import ObjectId
 
 from src.database import get_db
+from src.database_mongo import mongo_db
 from src.main import app
 
 HEADERS = {"X-User-Id": "2"}
@@ -99,6 +106,58 @@ def override_db(mock_db):
     app.dependency_overrides.clear()
 
 
+# --- Faux store Mongo + session DG de fond --------------------------------------
+
+
+class _FakeColl:
+    def __init__(self):
+        self.docs = {}
+
+    async def insert_one(self, doc):
+        _id = ObjectId()
+        doc = dict(doc)
+        doc["_id"] = _id
+        self.docs[str(_id)] = doc
+        return MagicMock(inserted_id=_id)
+
+    async def update_one(self, flt, update):
+        key = str(flt["_id"])
+        if key in self.docs:
+            self.docs[key].update(update["$set"])
+        return MagicMock()
+
+    async def find_one(self, flt):
+        doc = self.docs.get(str(flt["_id"]))
+        return dict(doc) if doc else None
+
+
+class _FakeDB:
+    def __init__(self):
+        object.__setattr__(self, "_colls", {})
+
+    def __getitem__(self, name):
+        return self._colls.setdefault(name, _FakeColl())
+
+    def __getattr__(self, name):  # accès attribut (ex: mongo_db.db.predictions)
+        colls = object.__getattribute__(self, "_colls")
+        return colls.setdefault(name, _FakeColl())
+
+
+@pytest.fixture
+def mongo_jobs(monkeypatch, mock_db):
+    """Rend Mongo disponible (require_mongo OK) et fait pointer la session de fond sur mock_db."""
+    monkeypatch.setattr(mongo_db, "db", _FakeDB())
+
+    class _Ctx:
+        async def __aenter__(self):
+            return mock_db
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr("src.services.job_service.AsyncSessionLocal", lambda: _Ctx())
+
+
 @contextmanager
 def _mock_ai(context=CONTEXT, recent=None, llm=None):
     recent = recent if recent is not None else []
@@ -119,42 +178,57 @@ def _mock_ai(context=CONTEXT, recent=None, llm=None):
         yield
 
 
-def test_generate_session_no_save(client):
+def _poll(client, job_id):
+    r = client.get(f"/ai/jobs/{job_id}")
+    assert r.status_code == 200
+    return r.json()
+
+
+def test_generate_session_no_save(client, mongo_jobs):
     with _mock_ai(llm=GEN_LLM):
         r = client.post("/ai/generate-session", headers=HEADERS, json={})
-    assert r.status_code == 200
-    data = r.json()
-    assert data["titre_seance"] == "Haut du corps"
-    assert data["id_seance_log"] is None  # pas de sauvegarde par défaut
-    assert len(data["exercices"]) == 1
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    result = job["result"]
+    assert result["titre_seance"] == "Haut du corps"
+    assert result["id_seance_log"] is None  # pas de sauvegarde par défaut
+    assert len(result["exercices"]) == 1
 
 
-def test_generate_session_with_save(client, mock_db):
+def test_generate_session_with_save(client, mongo_jobs, mock_db):
     with _mock_ai(llm=GEN_LLM):
         r = client.post("/ai/generate-session?sauvegarder=true", headers=HEADERS, json={})
-    assert r.status_code == 200
-    data = r.json()
-    assert data["id_seance_log"] == 123
-    assert data["statut"] == "proposee"
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["result"]["id_seance_log"] == 123
+    assert job["result"]["statut"] == "proposee"
     mock_db.add.assert_called_once()
     mock_db.commit.assert_awaited_once()
 
 
-def test_generate_session_user_not_found(client):
+def test_generate_session_user_not_found(client, mongo_jobs):
     with _mock_ai(context=None, llm=GEN_LLM):
         r = client.post("/ai/generate-session", headers=HEADERS, json={})
-    assert r.status_code == 404
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 404
 
 
-def test_generate_session_missing_header(client):
+def test_generate_session_missing_header(client, mongo_jobs):
     r = client.post("/ai/generate-session", json={})
     assert r.status_code == 422
 
 
-def test_generate_session_bad_llm_output(client):
+def test_generate_session_bad_llm_output(client, mongo_jobs):
     with _mock_ai(llm={"champ": "inattendu"}):
         r = client.post("/ai/generate-session", headers=HEADERS, json={})
-    assert r.status_code == 502
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 502
 
 
 def _seance_row(id_seance_log, id_utilisateur=2, statut="terminee"):
@@ -177,32 +251,39 @@ def _result_all(rows):
     return r
 
 
-def test_evaluate_sessions_by_ids(client, mock_db):
+def test_evaluate_sessions_by_ids(client, mongo_jobs, mock_db):
     mock_db.execute = AsyncMock(return_value=_result_all([_seance_row(1)]))
     with _mock_ai(llm=EVAL_LLM):
         r = client.post("/ai/evaluate-sessions", headers=HEADERS, json={"ids_seances": [1]})
-    assert r.status_code == 200
-    data = r.json()
-    assert data["note_globale"] == 4
-    assert data["avis_par_seance"][0]["index"] == 0
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["result"]["note_globale"] == 4
+    assert job["result"]["avis_par_seance"][0]["index"] == 0
 
 
-def test_evaluate_sessions_id_not_found(client, mock_db):
+def test_evaluate_sessions_id_not_found(client, mongo_jobs, mock_db):
     mock_db.execute = AsyncMock(return_value=_result_all([]))  # aucun id trouvé
     with _mock_ai(llm=EVAL_LLM):
         r = client.post("/ai/evaluate-sessions", headers=HEADERS, json={"ids_seances": [999]})
-    assert r.status_code == 404
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 404
 
 
-def test_evaluate_sessions_forbidden(client, mock_db):
+def test_evaluate_sessions_forbidden(client, mongo_jobs, mock_db):
     # séance appartenant à un autre utilisateur
     mock_db.execute = AsyncMock(return_value=_result_all([_seance_row(1, id_utilisateur=99)]))
     with _mock_ai(llm=EVAL_LLM):
         r = client.post("/ai/evaluate-sessions", headers=HEADERS, json={"ids_seances": [1]})
-    assert r.status_code == 403
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 403
 
 
-def test_evaluate_my_recent_sessions(client, mock_db):
+def test_evaluate_my_recent_sessions(client, mongo_jobs, mock_db):
     mock_db.execute = AsyncMock(
         side_effect=[
             _result_all([_seance_row(1, statut="terminee")]),
@@ -211,20 +292,39 @@ def test_evaluate_my_recent_sessions(client, mock_db):
     )
     with _mock_ai(llm=EVAL_LLM):
         r = client.get("/ai/evaluate-my-recent-sessions", headers=HEADERS)
-    assert r.status_code == 200
-    assert r.json()["note_globale"] == 4
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["result"]["note_globale"] == 4
 
 
-def test_evaluate_my_recent_sessions_empty(client, mock_db):
-    # aucune séance terminée ni prévue -> 404 (avant tout appel LLM)
+def test_evaluate_my_recent_sessions_empty(client, mongo_jobs, mock_db):
+    # aucune séance terminée ni prévue -> job en échec 404
     mock_db.execute = AsyncMock(side_effect=[_result_all([]), _result_all([])])
-    r = client.get("/ai/evaluate-my-recent-sessions", headers=HEADERS)
-    assert r.status_code == 404
+    with _mock_ai(llm=EVAL_LLM):
+        r = client.get("/ai/evaluate-my-recent-sessions", headers=HEADERS)
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 404
 
 
-def test_explain_exercises(client):
+def test_explain_exercises(client, mongo_jobs):
     payload = {"exercices": [{"nom": "Squat"}]}
     with _mock_ai(llm=EXPLAIN_LLM):
         r = client.post("/ai/explain-exercises", headers=HEADERS, json=payload)
-    assert r.status_code == 200
-    assert r.json()["explications"][0]["nom"] == "Squat"
+    assert r.status_code == 202
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["result"]["explications"][0]["nom"] == "Squat"
+
+
+def test_job_not_found(client, mongo_jobs):
+    r = client.get(f"/ai/jobs/{ObjectId()}")
+    assert r.status_code == 404
+
+
+def test_generate_session_mongo_unavailable(client):
+    # Sans la fixture mongo_jobs, mongo_db.db est None -> 503
+    r = client.post("/ai/generate-session", headers=HEADERS, json={})
+    assert r.status_code == 503
