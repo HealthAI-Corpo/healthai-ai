@@ -14,6 +14,7 @@ class ProfilSante(Base):
     taille_cm = Column(Integer)
     imc = Column(Numeric(4, 1))
     niveau_activite = Column(String(100))
+    type_maladie = Column(String(255))
     objectif_principal = Column(String(200))
     experience_sportive = Column(String(100))
     frequence_entrainement = Column(Integer)

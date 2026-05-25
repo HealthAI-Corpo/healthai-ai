@@ -1,4 +1,5 @@
 from sqlalchemy import Column, DateTime, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 
 from src.database import Base
 
@@ -18,5 +19,8 @@ class LogSeance(Base):
     # Features calories lues sur la séance (renseignées par le front, nullables)
     bpm_max = Column(Integer)
     consommation_eau_ml = Column(Numeric(7, 1))
+    # Liste d'exercices (multi-exercices) + cycle de vie de la séance
+    exercices = Column(JSONB)
+    statut = Column(String(20))  # proposee | prevue | en_cours | terminee
     id_exercice = Column(Integer)
     id_utilisateur = Column(Integer, nullable=False, index=True)

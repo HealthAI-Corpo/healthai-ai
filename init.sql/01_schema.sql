@@ -94,6 +94,8 @@ CREATE TABLE log_seance (
     bpm_moyen           INTEGER,
     bpm_max             INTEGER,
     consommation_eau_ml NUMERIC(7, 1),
+    exercices           JSONB,
+    statut              VARCHAR(20)   CHECK (statut IN ('proposee', 'prevue', 'en_cours', 'terminee')),
     id_exercice         INTEGER       REFERENCES exercice (id_exercice),
     id_utilisateur      INTEGER       NOT NULL REFERENCES utilisateur (id_utilisateur) ON DELETE CASCADE
 );

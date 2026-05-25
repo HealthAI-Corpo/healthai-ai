@@ -10,6 +10,7 @@ from loguru import logger
 
 from src.core.config import settings
 from src.database_mongo import mongo_db
+from src.routers.ai_sessions import router as ai_sessions_router
 from src.routers.calorie_estimation import router as calorie_router
 from src.routers.calorie_from_session import router as calorie_from_session_router
 from src.routers.recommendations import router as recommendations_router
@@ -74,6 +75,7 @@ app = FastAPI(title="HealthAI Workout Service", version="1.0.0", lifespan=lifesp
 app.include_router(calorie_router)
 app.include_router(calorie_from_session_router)
 app.include_router(recommendations_router)
+app.include_router(ai_sessions_router)
 
 
 @app.get("/")

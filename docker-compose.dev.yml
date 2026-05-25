@@ -115,6 +115,9 @@ services:
   ollama-pull-model:
     image: ollama/ollama:latest
     container_name: healthai-ollama-pull
+    # Le CLI `ollama` doit pointer vers le serveur (service `ollama`), pas son propre conteneur.
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
     networks:
       - internal
     depends_on:
@@ -122,7 +125,8 @@ services:
     volumes:
       - ollama_storage:/root/.ollama
     entrypoint: /bin/sh
-    command: -c "sleep 5 && ollama pull llama3.2:3b"
+    # Attend que le serveur réponde, puis pull le modèle (pas de sleep arbitraire).
+    command: -c "until ollama list >/dev/null 2>&1; do echo 'attente du serveur ollama...'; sleep 2; done && ollama pull llama3.2:3b"
 
 networks:
   internal:
