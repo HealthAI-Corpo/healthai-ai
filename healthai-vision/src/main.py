@@ -130,8 +130,6 @@ async def analyze_meal(
 # ==============================================================
 
 
-
-
 @app.post("/nutrition/ai/advice")
 async def get_nutritional_advice_endpoint(
     payload: AdviceRequest, background_tasks: BackgroundTasks

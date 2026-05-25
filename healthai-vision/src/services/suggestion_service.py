@@ -86,13 +86,9 @@ async def suggest_meal_from_db(user_id: int, db_sql: AsyncSession) -> dict:
             "titre_repas": "Salade de poulet grillé et quinoa",
             "estimation_calories": f"{int(reste_cal) if reste_cal > 200 else 400} kcal",
             "ingredients": (
-                "150g de blanc de poulet, 60g de quinoa, "
-                "1 tomate, 1 c.à.s d'huile d'olive"
+                "150g de blanc de poulet, 60g de quinoa, 1 tomate, 1 c.à.s d'huile d'olive"
             ),
-            "instructions": (
-                "Cuire le quinoa. Griller le poulet "
-                "et mélanger le tout dans un bol."
-            ),
+            "instructions": ("Cuire le quinoa. Griller le poulet et mélanger le tout dans un bol."),
             "debug_error": str(e),
         }
 
@@ -106,34 +102,33 @@ async def validate_and_log_meal_to_postgres(suggestion_id: str, db_sql: AsyncSes
     suggestion = await mongo_db.db.suggestions.find_one({"_id": ObjectId(suggestion_id)})
     if not suggestion:
         return {"error": "Suggestion introuvable."}
-    
+
     if suggestion.get("status") != "completed":
         return {"error": "Cette suggestion n'a pas encore fini d'être générée ou a échoué."}
 
     # 2. Changement d'état de validation dans Mongo
     await mongo_db.db.suggestions.update_one(
-        {"_id": ObjectId(suggestion_id)},
-        {"$set": {"validation_status": "approved"}}
+        {"_id": ObjectId(suggestion_id)}, {"$set": {"validation_status": "approved"}}
     )
 
     # 3. Récupération des infos de la recette
     recette = suggestion.get("suggestion", {})
-    
+
     # 4. Enregistrement final dans PostgreSQL via le modèle LogRepas
     # Plus besoin de 'calories_int', Ruff est content !
     nouveau_log = LogRepas(
         id_utilisateur=int(suggestion["user_id"]),
         repas=recette.get("titre_repas", "Repas Recommandé")[:50],
-        quantite=1.00,                 
-        unite="portion",               
-        id_aliment=1,                  # ID de ton "Repas Personnalisé IA" dans la table 'aliment'
-        log_date=datetime.utcnow()     
+        quantite=1.00,
+        unite="portion",
+        id_aliment=1,  # ID de ton "Repas Personnalisé IA" dans la table 'aliment'
+        log_date=datetime.utcnow(),
     )
-    
+
     db_sql.add(nouveau_log)
     await db_sql.commit()
 
     return {
-        "message": "Repas validé et inscrit avec succès dans PostgreSQL", 
-        "suggestion_id": suggestion_id
+        "message": "Repas validé et inscrit avec succès dans PostgreSQL",
+        "suggestion_id": suggestion_id,
     }
