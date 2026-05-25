@@ -104,7 +104,7 @@ Recommandations du modèle IA :
 Historique récent (éviter les mêmes groupes musculaires) :
 {hist_text}
 
-Génère une séance de 45 minutes respectant strictement le format JSON demandé.
+Génère une séance de 45 à 70 minutes respectant strictement le format JSON demandé.
 """
 
         workout = await generate_llm_prediction(system_prompt=system_prompt, user_prompt=user_prompt)

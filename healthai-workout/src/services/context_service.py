@@ -82,3 +82,51 @@ async def get_recent_sessions(db: AsyncSession, user_id: int, limit: int = 5) ->
         }
         for s in seances
     ]
+
+
+# Le profil santé stocke l'expérience en texte ; le classifier de reco attend un niveau 1-3.
+_EXPERIENCE_TO_NIVEAU = {
+    "débutant": 1,
+    "debutant": 1,
+    "novice": 1,
+    "intermédiaire": 2,
+    "intermediaire": 2,
+    "avancé": 3,
+    "avance": 3,
+    "expert": 3,
+}
+
+
+def _niveau_experience(experience_sportive: str | None) -> int:
+    if not experience_sportive:
+        return 1
+    return _EXPERIENCE_TO_NIVEAU.get(experience_sportive.strip().lower(), 1)
+
+
+async def build_recommendation_profile(db: AsyncSession, user_id: int) -> dict | None:
+    """Assemble le profil attendu par /recommendations/workout à partir de la base.
+
+    Renvoie None si l'utilisateur n'existe pas. Les champs absents (None) sont omis
+    afin que le service applique ses propres valeurs par défaut.
+    """
+    context = await get_user_context(db, user_id)
+    if context is None:
+        return None
+
+    recent = await get_recent_sessions(db, user_id)
+    historique = [
+        f"{s.get('date')} : {s.get('type_seance') or 'séance'} ({s.get('duree_minutes')} min)"
+        for s in recent
+    ]
+
+    profile = {
+        "age": context.get("age"),
+        "poids_kg": context.get("poids_kg"),
+        "taille_cm": context.get("taille_cm"),
+        "niveau_experience": _niveau_experience(context.get("experience_sportive")),
+        "frequence_sport_jour_semaine": context.get("frequence_entrainement"),
+        "objectif": context.get("objectif_principal"),
+        "limitations": context.get("type_maladie"),
+        "historique_seances": historique,
+    }
+    return {k: v for k, v in profile.items() if v is not None}

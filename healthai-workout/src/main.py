@@ -17,10 +17,6 @@ from src.routers.recommendations import router as recommendations_router
 from src.services.calorie_service import CalorieService
 from src.services.recommendation_service import load_recommendation_service
 
-# NB : src.routers.sessions (CRUD sur la table `sessions`) est conservé mais NON monté.
-# Décision d'équipe : c'est le front via healthai-api (NestJS) qui persiste les séances.
-# Voir healthai-infra/AI-AVANCEMENT.md.
-
 
 def _load_artifact(path: Path):
     """Charge un artefact pkl via joblib avec fallback pickle."""
