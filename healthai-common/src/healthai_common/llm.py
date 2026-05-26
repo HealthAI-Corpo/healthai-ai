@@ -67,7 +67,12 @@ async def generate_meal_suggestion(
             "ingredients": {"type": "string"},
             "instructions": {"type": "string"},
         },
-        "required": ["titre_repas", "estimation_calories", "ingredients", "instructions"],
+        "required": [
+            "titre_repas",
+            "estimation_calories",
+            "ingredients",
+            "instructions",
+        ],
     }
 
     payload = {

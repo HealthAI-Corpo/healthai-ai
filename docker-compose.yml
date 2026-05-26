@@ -1,7 +1,9 @@
 services:
   # --- GATEWAY PRINCIPALE ---
   healthai-api:
-    build: ./healthai-api
+    build:
+      context: .
+      dockerfile: ./healthai-api/Dockerfile
     ports:
       - "8000:8000"
     env_file:
@@ -10,8 +12,6 @@ services:
       - ./healthai-api/src:/app/src
     command:
       [
-        "uv",
-        "run",
         "uvicorn",
         "src.main:app",
         "--host",
@@ -22,7 +22,7 @@ services:
       ]
     depends_on:
       - healthai-vision
-      - healthai-workout
+      #- healthai-workout
       - postgres
     networks:
       - internal
@@ -69,8 +69,8 @@ services:
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-    volumes:
-      - ./healthai-workout/src:/app/src
+    #volumes:
+    #- ./healthai-workout/src:/app/src
     depends_on:
       - postgres
       - mongo

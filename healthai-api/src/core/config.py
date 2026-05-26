@@ -2,19 +2,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Lecture du fichier .env
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Variables attendues par main.py
-    # Valeurs par défaut
+    # Variables de routage interne
     SERVICE_PORT: int = 8000
     VISION_SERVICE_URL: str = "http://healthai-vision:8001"
     WORKOUT_SERVICE_URL: str = "http://healthai-workout:8002"
 
+    # Configuration Zitadel (Déplacées à l'intérieur de la classe)
+    ZITADEL_DOMAIN: str = "https://your-domain.zitadel.cloud"
+    ZITADEL_CLIENT_ID: str = "your-client-id"
 
-# On crée l'instance que main.py essaie d'importer
+
 settings = Settings()
-
-# Config Zitadel
-ZITADEL_DOMAIN: str
-ZITADEL_CLIENT_ID: str
