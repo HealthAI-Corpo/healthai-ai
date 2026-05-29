@@ -1,5 +1,18 @@
+# ==============================================================================
+# Compose DEV — repo healthai-ai (uniquement la stack IA)
+#
+# /!\ Les ports des micro-services internes (vision 8001, workout 8002) sont
+# exposés sur l'hôte pour faciliter le debug et l'accès direct à Swagger.
+#
+# En PRODUCTION (compose `healthai-infra/docker-compose.yml`) ces ports ne sont
+# PAS publiés : seul `healthai-ai-gateway` (port 8003) est accessible depuis
+# l'extérieur, les autres restent sur le réseau interne `internal`.
+# ==============================================================================
+
 services:
-  # --- GATEWAY PRINCIPALE ---
+  # --- GATEWAY IA (FastAPI) ---
+  # En prod (healthai-infra), c'est ce service qui est exposé sous le nom
+  # `healthai-ai-gateway` et porte la validation JWKS Zitadel.
   healthai-api:
     build:
       context: .
@@ -28,6 +41,8 @@ services:
       - internal
 
   # --- SERVICE VISION ---
+  # DEV uniquement : port 8001 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-vision:
     build:
       context: .
@@ -55,6 +70,8 @@ services:
       - internal
 
   # --- SERVICE WORKOUT ---
+  # DEV uniquement : port 8002 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-workout:
     build:
       context: .
@@ -79,6 +96,9 @@ services:
       - internal
 
   # --- BASE DE DONNÉES NOSQL ---
+  # DEV uniquement : Mongo embarqué pour tests locaux des jobs IA.
+  # En prod, Mongo est provisionné par `healthai-infra` (compose central) et
+  # n'est pas publié sur l'hôte — vision/workout y accèdent via le réseau interne.
   mongo:
     image: mongo:7
     ports:
