@@ -4,17 +4,26 @@ from os import getenv
 
 import httpx
 from bson import ObjectId
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+)
 from pydantic import BaseModel
 
 from src.database import AsyncSessionLocal
 from src.database_mongo import mongo_db
 from src.services.ai_service import ai_service
 from src.services.nutrition_service import enrich_with_nutrition
-from src.services.recommandation_service import (
-    run_ollama_in_background,
+from src.services.recommandation_service import run_ollama_in_background
+from src.services.suggestion_service import (
+    suggest_meal_from_db,
+    validate_and_log_meal_to_postgres,
 )
-from src.services.suggestion_service import suggest_meal_from_db, validate_and_log_meal_to_postgres
 
 OLLAMA_BASE_URL = getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
 
@@ -75,10 +84,15 @@ async def health():
 
 @app.post("/analyze")
 async def analyze_meal(
-    file: UploadFile = File(...), user_id: str = "1", db_sql=Depends(get_db_sql)
+    file: UploadFile = File(...),
+    x_user_id: str = Header(None),  # Injecté par la Gateway
+    db_sql=Depends(get_db_sql),
 ):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Format de fichier non supporté.")
+
+    # Sécurité au cas où la route est appelée en dehors de la Gateway
+    user_id = x_user_id or "1"
 
     try:
         image_bytes = await file.read()
@@ -236,7 +250,7 @@ async def get_suggestion_endpoint_status(suggestion_id: str):
 async def validate_suggestion_endpoint(
     payload: ValidateSuggestionRequest, db_sql=Depends(get_db_sql)
 ):
-    """Nouvel Endpoint permettant de valider le repas choisi et de le pousser dans Postgres."""
+    """Endpoint de validation poussant le repas choisi dans Postgres."""
     res = await validate_and_log_meal_to_postgres(payload.suggestion_id, db_sql)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])

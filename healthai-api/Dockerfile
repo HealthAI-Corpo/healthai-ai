@@ -1,20 +1,21 @@
-# ── Builder ───────────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim
 
+WORKDIR /app
+
+# Récupération de UV
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+# Plus de "..", on part de la racine globale !
+COPY healthai-common /healthai-common
+COPY healthai-api/pyproject.toml healthai-api/uv.lock* ./
+
+# Installation globale (évite le bug du uvicorn introuvable avec les volumes)
+ENV UV_SYSTEM_PYTHON=1
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --frozen
+    uv sync --no-dev
 
-# ── Runner ────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runner
-
-WORKDIR /app
-
-COPY --from=builder /app/.venv ./.venv
-COPY src/ ./src/
+# Copie du code source
+COPY healthai-api/src/ ./src/
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

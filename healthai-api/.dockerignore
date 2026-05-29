@@ -1,0 +1,23 @@
+# Caches Python et outils
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environnements virtuels locaux
+.venv/
+venv/
+env/
+
+# Git
+.git
+.gitignore
+
+# Variables d'environnement locales (Sécurité !)
+.env
+.env.*
