@@ -4,8 +4,11 @@
 # Tout le reste (vision, workout, gateway, mongo, ollama) est identique au compose commun.
 services:
   # --- GATEWAY PRINCIPALE ---
+  # context = racine du repo car le Dockerfile copie aussi `healthai-common` (path dep).
   healthai-api:
-    build: ./healthai-api
+    build:
+      context: .
+      dockerfile: ./healthai-api/Dockerfile
     ports:
       - "8000:8000"
     env_file:
