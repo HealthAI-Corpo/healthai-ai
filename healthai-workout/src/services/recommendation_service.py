@@ -3,9 +3,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from healthai_common.llm import LLMJsonError
 from loguru import logger
 
-from src.services.llm_service import generate_llm_prediction
+from src.services import job_service
+from src.services.llm_service import generate_llm_prediction_with_raw
 
 # Schéma JSON envoyé à Ollama pour contraindre la séance produite (cf. system_prompt).
 _SEANCE_SCHEMA = {
@@ -74,8 +76,12 @@ class RecommendationService:
             "confidence": confidence,
         }
 
-    async def generate(self, profile: dict[str, Any]) -> dict[str, Any]:
-        """Pipeline complet : classifier → prompt → LLM → réponse enrichie."""
+    async def generate(self, profile: dict[str, Any], job_id: str | None = None) -> dict[str, Any]:
+        """Pipeline complet : classifier → prompt → LLM → réponse enrichie.
+
+        Si `job_id` est fourni, l'appel LLM (prompt + raw response) est tracé dans
+        le job Mongo pour debug — succès comme échec JSON.
+        """
         predictions = self.predict_profile(profile)
         logger.info(
             "Classifier → type={} intensite={} muscles={}",
@@ -133,9 +139,32 @@ Historique récent (éviter les mêmes groupes musculaires) :
 Génère une séance de 45 à 70 minutes respectant strictement le format JSON demandé.
 """
 
-        workout = await generate_llm_prediction(
-            system_prompt=system_prompt, user_prompt=user_prompt, response_format=_SEANCE_SCHEMA
-        )
+        try:
+            raw_text, workout = await generate_llm_prediction_with_raw(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_format=_SEANCE_SCHEMA,
+            )
+        except LLMJsonError as exc:
+            if job_id:
+                await job_service.record_llm_call(
+                    job_id,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    raw_response=exc.raw_text,
+                    parsed_ok=False,
+                    error=str(exc.original) if exc.original else str(exc),
+                )
+            raise
+
+        if job_id:
+            await job_service.record_llm_call(
+                job_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=raw_text,
+                parsed_ok=True,
+            )
 
         return {
             "predictions_classifier": predictions,
