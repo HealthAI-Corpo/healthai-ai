@@ -62,7 +62,17 @@ async def lifespan(app: FastAPI):
     await dispose_engine()
 
 
-app = FastAPI(title="HealthAI Gateway", lifespan=lifespan)
+app = FastAPI(
+    title="HealthAI Gateway",
+    version="1.0.0",
+    description=(
+        "Point d'entrée public unique des services IA. Reverse proxy authentifié vers "
+        "`healthai-vision` (`/vision/*`) et `healthai-workout` (`/workout/*`). En "
+        "production l'authentification se fait via JWT Zitadel (Bearer) ; en dev local "
+        "le mode `AUTH_MODE=dev_stub` court-circuite cette validation."
+    ),
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -114,7 +124,17 @@ async def forward_request(
 
 
 # /vision/* -> healthai-vision (port 8001 en interne)
-@app.api_route("/vision/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/vision/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    tags=["Vision proxy"],
+    summary="Reverse proxy vers healthai-vision",
+    description=(
+        "Préfixe ajouté par la gateway : `POST /vision/analyze` → `POST /analyze` côté "
+        "vision. La gateway strip tout `X-User-Id` envoyé par le client et injecte celui "
+        "résolu depuis le JWT. Cf. Swagger du service vision pour la liste détaillée."
+    ),
+)
 async def route_to_vision(
     path: str, request: Request, current_user: dict = Depends(get_current_user)
 ) -> StreamingResponse:
@@ -122,21 +142,41 @@ async def route_to_vision(
 
 
 # /workout/* -> healthai-workout (port 8002 en interne, inclut /ai/* et /calorie-estimation/*)
-@app.api_route("/workout/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/workout/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    tags=["Workout proxy"],
+    summary="Reverse proxy vers healthai-workout",
+    description=(
+        "Préfixe ajouté par la gateway : `POST /workout/ai/generate-session` → "
+        "`POST /ai/generate-session` côté workout. Couvre `/calorie-estimation/*`, "
+        "`/ai/*`, `/recommendations/*`. Cf. Swagger du service workout."
+    ),
+)
 async def route_to_workout(
     path: str, request: Request, current_user: dict = Depends(get_current_user)
 ) -> StreamingResponse:
     return await forward_request(settings.WORKOUT_SERVICE_URL, path, request, current_user)
 
 
-@app.get("/health", response_model=StatusResponse)
+@app.get(
+    "/health",
+    response_model=StatusResponse,
+    tags=["Diagnostics"],
+    summary="Liveness de la gateway",
+)
 async def health() -> StatusResponse:
     return StatusResponse(status="ok", message="HealthAI Gateway up")
 
 
-@app.get("/test-internal", response_model=InternalHealthResponse)
+@app.get(
+    "/test-internal",
+    response_model=InternalHealthResponse,
+    tags=["Diagnostics"],
+    summary="Diagnostic agrégé vision + workout",
+)
 async def test_internal() -> InternalHealthResponse:
-    """Diagnostic interne : ping /health de chaque micro-service."""
+    """Ping `/health` de chaque micro-service interne."""
 
     async def _ping(url: str) -> dict | str:
         try:

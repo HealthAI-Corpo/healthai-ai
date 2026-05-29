@@ -1,12 +1,23 @@
 # ==============================================================================
-# Compose DEV — repo healthai-ai (uniquement la stack IA)
+# Compose DEV — repo healthai-ai (stack IA tout-en-un, embarqué)
 #
-# /!\ Les ports des micro-services internes (vision 8001, workout 8002) sont
-# exposés sur l'hôte pour faciliter le debug et l'accès direct à Swagger.
+# Quand utiliser CE fichier (defaut) ?
+#   Pour developper sur le repo healthai-ai SANS dependre du repo healthai-infra.
+#   Il embarque tout localement : Postgres + Mongo + Ollama + gateway + vision +
+#   workout, sur un reseau Docker isole.
 #
-# En PRODUCTION (compose `healthai-infra/docker-compose.yml`) ces ports ne sont
-# PAS publiés : seul `healthai-ai-gateway` (port 8003) est accessible depuis
-# l'extérieur, les autres restent sur le réseau interne `internal`.
+# Quand utiliser docker-compose.dev.yml a la place ?
+#   Quand healthai-infra tourne deja en parallele et expose Postgres. Le fichier
+#   .dev.yml ne lance PAS Postgres et pointe vers host.docker.internal:5432.
+#
+# Quand le vrai prod ?
+#   Voir healthai-infra/docker-compose.yml qui pull les images depuis ghcr.io.
+#   Aucun build local.
+#
+# /!\ Les ports des micro-services internes (vision 8001, workout 8002, mongo
+# 27017) sont publies sur l'hote pour faciliter le debug et l'acces direct au
+# Swagger. En PROD (healthai-infra), seul le gateway est expose ; vision /
+# workout / mongo / ollama restent sur le reseau interne.
 # ==============================================================================
 
 services:
@@ -55,7 +66,7 @@ services:
     environment:
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
       - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache

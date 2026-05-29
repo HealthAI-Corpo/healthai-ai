@@ -67,19 +67,29 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown complet")
 
 
-app = FastAPI(title="HealthAI Workout Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="HealthAI Workout",
+    version="1.0.0",
+    description=(
+        "Service IA d'estimation de calories (RandomForest) et de génération de séances "
+        "/ recommandations / évaluations via Ollama. Toutes les routes exigent le header "
+        "`X-User-Id` injecté par la gateway. Les routes LLM sont asynchrones : 202 + "
+        "polling via `GET /ai/jobs/{job_id}`."
+    ),
+    lifespan=lifespan,
+)
 app.include_router(calorie_router)
 app.include_router(calorie_from_session_router)
 app.include_router(recommendations_router)
 app.include_router(ai_sessions_router)
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
     return {"message": "Workout Service is up and running"}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Diagnostics"])
 async def health():
     """Vérifie la connectivité avec Ollama."""
     try:
