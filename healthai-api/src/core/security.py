@@ -110,7 +110,9 @@ async def _validate_jwt(token: str) -> dict[str, Any]:
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token expiré.") from exc
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Token invalide : {exc}") from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, f"Token invalide : {exc}"
+        ) from exc
 
     _check_role(claims)
     return claims

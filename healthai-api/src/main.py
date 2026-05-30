@@ -114,7 +114,10 @@ async def forward_request(
             ) from exc
 
     response_headers = {
-        k: v for k, v in upstream.headers.items() if k.lower() not in {"content-encoding", "transfer-encoding", "content-length", "connection"}
+        k: v
+        for k, v in upstream.headers.items()
+        if k.lower()
+        not in {"content-encoding", "transfer-encoding", "content-length", "connection"}
     }
     return StreamingResponse(
         iter([upstream.content]),
@@ -138,7 +141,9 @@ async def forward_request(
 async def route_to_vision(
     path: str, request: Request, current_user: dict = Depends(get_current_user)
 ) -> StreamingResponse:
-    return await forward_request(settings.VISION_SERVICE_URL, path, request, current_user)
+    return await forward_request(
+        settings.VISION_SERVICE_URL, path, request, current_user
+    )
 
 
 # /workout/* -> healthai-workout (port 8002 en interne, inclut /ai/* et /calorie-estimation/*)
@@ -156,7 +161,9 @@ async def route_to_vision(
 async def route_to_workout(
     path: str, request: Request, current_user: dict = Depends(get_current_user)
 ) -> StreamingResponse:
-    return await forward_request(settings.WORKOUT_SERVICE_URL, path, request, current_user)
+    return await forward_request(
+        settings.WORKOUT_SERVICE_URL, path, request, current_user
+    )
 
 
 @app.get(
@@ -182,7 +189,13 @@ async def test_internal() -> InternalHealthResponse:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{url.rstrip('/')}/health")
-                return resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+                return (
+                    resp.json()
+                    if resp.headers.get("content-type", "").startswith(
+                        "application/json"
+                    )
+                    else resp.text
+                )
         except Exception as exc:  # noqa: BLE001
             return f"unreachable: {exc}"
 
@@ -190,4 +203,6 @@ async def test_internal() -> InternalHealthResponse:
         _ping(settings.VISION_SERVICE_URL),
         _ping(settings.WORKOUT_SERVICE_URL),
     )
-    return InternalHealthResponse(gateway="ok", vision_service=vision, workout_service=workout)
+    return InternalHealthResponse(
+        gateway="ok", vision_service=vision, workout_service=workout
+    )
