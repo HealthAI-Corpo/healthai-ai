@@ -57,9 +57,7 @@ async def analyze_meal(
             "lipides": sum(
                 item.get("nutrition", {}).get("lipides", 0) for item in enriched_results
             ),
-            "eau_ml": sum(
-                item.get("nutrition", {}).get("eau", 0) for item in enriched_results
-            ),
+            "eau_ml": sum(item.get("nutrition", {}).get("eau", 0) for item in enriched_results),
         }
 
         consumption_doc = {

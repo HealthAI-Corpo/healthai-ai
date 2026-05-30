@@ -80,9 +80,7 @@ async def test_suggest_meal_endpoint_async_trigger():
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post(
-                "/nutrition/ai/suggest-meal", headers={"X-User-Id": "1"}
-            )
+            response = await ac.post("/nutrition/ai/suggest-meal", headers={"X-User-Id": "1"})
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "processing"

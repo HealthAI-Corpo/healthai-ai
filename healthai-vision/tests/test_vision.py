@@ -32,9 +32,7 @@ async def test_analyze_endpoint_complete_flow():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             files = {"file": ("test.jpg", img_bytes, "image/jpeg")}
-            response = await ac.post(
-                "/analyze", headers={"X-User-Id": "1"}, files=files
-            )
+            response = await ac.post("/analyze", headers={"X-User-Id": "1"}, files=files)
 
     app.dependency_overrides.clear()
 
@@ -52,9 +50,7 @@ async def test_analyze_invalid_file():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         files = {"file": ("test.txt", b"not an image", "text/plain")}
-        response = await ac.post(
-            "/analyze", headers={"X-User-Id": "1"}, files=files
-        )
+        response = await ac.post("/analyze", headers={"X-User-Id": "1"}, files=files)
     assert response.status_code == 400
     assert "Format de fichier non supporté" in response.json()["detail"]
 
