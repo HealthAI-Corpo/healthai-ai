@@ -123,7 +123,11 @@ class _FakeColl:
     async def update_one(self, flt, update):
         key = str(flt["_id"])
         if key in self.docs:
-            self.docs[key].update(update["$set"])
+            if "$set" in update:
+                self.docs[key].update(update["$set"])
+            if "$push" in update:
+                for field, value in update["$push"].items():
+                    self.docs[key].setdefault(field, []).append(value)
         return MagicMock()
 
     async def find_one(self, flt):
@@ -160,7 +164,13 @@ def mongo_jobs(monkeypatch, mock_db):
 
 @contextmanager
 def _mock_ai(context=CONTEXT, recent=None, llm=None):
+    """Mocke contexte + LLM. `llm` est le dict parsé renvoyé par Ollama.
+
+    On patch `generate_llm_prediction_with_raw` pour qu'il renvoie `(raw_text, llm)`,
+    cohérent avec la nouvelle signature.
+    """
     recent = recent if recent is not None else []
+    raw_text = "{}" if llm is None else __import__("json").dumps(llm, ensure_ascii=False)
     with (
         patch(
             "src.services.ai_session_service.get_user_context",
@@ -171,15 +181,15 @@ def _mock_ai(context=CONTEXT, recent=None, llm=None):
             new=AsyncMock(return_value=recent),
         ),
         patch(
-            "src.services.ai_session_service.generate_llm_prediction",
-            new=AsyncMock(return_value=llm),
+            "src.services.ai_session_service.generate_llm_prediction_with_raw",
+            new=AsyncMock(return_value=(raw_text, llm or {})),
         ),
     ):
         yield
 
 
-def _poll(client, job_id):
-    r = client.get(f"/ai/jobs/{job_id}")
+def _poll(client, job_id, headers=HEADERS):
+    r = client.get(f"/ai/jobs/{job_id}", headers=headers)
     assert r.status_code == 200
     return r.json()
 
@@ -320,8 +330,49 @@ def test_explain_exercises(client, mongo_jobs):
 
 
 def test_job_not_found(client, mongo_jobs):
-    r = client.get(f"/ai/jobs/{ObjectId()}")
+    r = client.get(f"/ai/jobs/{ObjectId()}", headers=HEADERS)
     assert r.status_code == 404
+
+
+def test_job_owned_by_other_user_returns_404(client, mongo_jobs):
+    """L'utilisateur 2 crée un job ; l'utilisateur 99 reçoit 404 (pas 403, pas de leak)."""
+    with _mock_ai(llm=GEN_LLM):
+        r = client.post("/ai/generate-session", headers=HEADERS, json={})
+    job_id = r.json()["job_id"]
+
+    r = client.get(f"/ai/jobs/{job_id}", headers={"X-User-Id": "99"})
+    assert r.status_code == 404
+
+
+def test_job_missing_header(client, mongo_jobs):
+    r = client.get(f"/ai/jobs/{ObjectId()}")
+    assert r.status_code == 422
+
+
+def test_job_includes_llm_calls_trace(client, mongo_jobs):
+    """Succès : `llm_calls` contient le prompt + raw_response, parsed_ok=True."""
+    with _mock_ai(llm=GEN_LLM):
+        r = client.post("/ai/generate-session", headers=HEADERS, json={})
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "completed"
+    assert len(job["llm_calls"]) == 1
+    call = job["llm_calls"][0]
+    assert call["parsed_ok"] is True
+    assert "system_prompt" in call and call["system_prompt"]
+    assert "user_prompt" in call and call["user_prompt"]
+    assert call["raw_response"]  # texte brut renvoyé par Ollama
+
+
+def test_job_trace_on_bad_llm_output(client, mongo_jobs):
+    """Validation schema échouée : trace conservée avec parsed_ok=False."""
+    with _mock_ai(llm={"champ": "inattendu"}):
+        r = client.post("/ai/generate-session", headers=HEADERS, json={})
+    job = _poll(client, r.json()["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == 502
+    assert len(job["llm_calls"]) == 1
+    assert job["llm_calls"][0]["parsed_ok"] is False
+    assert job["llm_calls"][0]["raw_response"]
 
 
 def test_generate_session_mongo_unavailable(client):

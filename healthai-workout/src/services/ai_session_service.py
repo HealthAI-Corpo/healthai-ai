@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException
+from healthai_common.llm import LLMJsonError
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
@@ -22,8 +23,9 @@ from src.schemas.ai_sessions import (
     ExplainExercisesResponse,
     GenerateSessionResponse,
 )
+from src.services import job_service
 from src.services.context_service import get_recent_sessions, get_user_context
-from src.services.llm_service import generate_llm_prediction
+from src.services.llm_service import generate_llm_prediction_with_raw
 
 
 async def _trace_mongo(
@@ -56,6 +58,66 @@ def _validate_llm(raw: dict, model: type[BaseModel], endpoint: str) -> BaseModel
             status_code=502,
             detail=f"Le LLM a renvoyé une structure inattendue pour {endpoint}.",
         ) from e
+
+
+async def _call_llm_traced(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    response_format: dict,
+    endpoint: str,
+    response_model: type[BaseModel],
+    job_id: str | None,
+) -> BaseModel:
+    """Appelle Ollama, trace le prompt + raw response dans le job, valide la sortie.
+
+    Trace systématique (succès comme JSON invalide) — c'est l'intérêt principal :
+    pouvoir relire ce que le modèle a effectivement renvoyé sans rejouer.
+    """
+    try:
+        raw_text, raw = await generate_llm_prediction_with_raw(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            response_format=response_format,
+        )
+    except LLMJsonError as exc:
+        if job_id:
+            await job_service.record_llm_call(
+                job_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=exc.raw_text,
+                parsed_ok=False,
+                error=str(exc.original) if exc.original else str(exc),
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Le LLM n'a pas renvoyé un JSON valide pour {endpoint}.",
+        ) from exc
+
+    try:
+        validated = _validate_llm(raw, response_model, endpoint)
+    except HTTPException:
+        if job_id:
+            await job_service.record_llm_call(
+                job_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=raw_text,
+                parsed_ok=False,
+                error=f"validation schema {response_model.__name__} échouée",
+            )
+        raise
+
+    if job_id:
+        await job_service.record_llm_call(
+            job_id,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            parsed_ok=True,
+        )
+    return validated
 
 
 async def _require_context(db: AsyncSession, user_id: int) -> dict:
@@ -172,6 +234,7 @@ async def generate_session(
     user_id: int,
     contraintes: dict,
     sauvegarder: bool,
+    job_id: str | None = None,
 ) -> dict:
     start = time.perf_counter()
     context = await _require_context(db, user_id)
@@ -223,10 +286,14 @@ Historique récent (propose une séance complémentaire, évite de répéter le 
 Génère la séance idéale en respectant strictement le format JSON demandé.
 """
 
-    raw = await generate_llm_prediction(
-        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_GENERATE_SCHEMA
+    resp: GenerateSessionResponse = await _call_llm_traced(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        response_format=_GENERATE_SCHEMA,
+        endpoint="generate-session",
+        response_model=GenerateSessionResponse,
+        job_id=job_id,
     )
-    resp: GenerateSessionResponse = _validate_llm(raw, GenerateSessionResponse, "generate-session")
 
     result: dict[str, Any] = resp.model_dump()
 
@@ -258,7 +325,9 @@ Génère la séance idéale en respectant strictement le format JSON demandé.
 # --- evaluate-sessions ----------------------------------------------------------
 
 
-async def evaluate_sessions(db: AsyncSession, user_id: int, seances: list[dict]) -> dict:
+async def evaluate_sessions(
+    db: AsyncSession, user_id: int, seances: list[dict], job_id: str | None = None
+) -> dict:
     # Pas d'historique récent ici : les séances à évaluer sont déjà fournies explicitement
     # (et pour evaluate_recent_sessions elles SONT l'historique). L'ajouter ferait doublon.
     start = time.perf_counter()
@@ -297,10 +366,14 @@ Séances à évaluer (JSON) :
 Évalue chaque séance et renvoie le JSON demandé.
 """
 
-    raw = await generate_llm_prediction(
-        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_EVALUATE_SCHEMA
+    resp = await _call_llm_traced(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        response_format=_EVALUATE_SCHEMA,
+        endpoint="evaluate-sessions",
+        response_model=EvaluateSessionsResponse,
+        job_id=job_id,
     )
-    resp = _validate_llm(raw, EvaluateSessionsResponse, "evaluate-sessions")
 
     await _trace_mongo(
         "evaluate-sessions",
@@ -321,7 +394,9 @@ def _seance_to_eval_dict(s: LogSeance) -> dict:
     }
 
 
-async def evaluate_sessions_by_ids(db: AsyncSession, user_id: int, ids_seances: list[int]) -> dict:
+async def evaluate_sessions_by_ids(
+    db: AsyncSession, user_id: int, ids_seances: list[int], job_id: str | None = None
+) -> dict:
     """Évalue des séances existantes désignées par leurs ids (propriété vérifiée)."""
     rows = (
         (await db.execute(select(LogSeance).where(LogSeance.id_seance_log.in_(ids_seances))))
@@ -342,10 +417,12 @@ async def evaluate_sessions_by_ids(db: AsyncSession, user_id: int, ids_seances: 
         )
 
     seances = [_seance_to_eval_dict(par_id[i]) for i in ids_seances]
-    return await evaluate_sessions(db, user_id, seances)
+    return await evaluate_sessions(db, user_id, seances, job_id=job_id)
 
 
-async def evaluate_recent_sessions(db: AsyncSession, user_id: int) -> dict:
+async def evaluate_recent_sessions(
+    db: AsyncSession, user_id: int, job_id: str | None = None
+) -> dict:
     """Évalue les 7 dernières séances terminées + jusqu'à 5 séances prévues (plus proches)."""
     terminees = (
         (
@@ -377,13 +454,15 @@ async def evaluate_recent_sessions(db: AsyncSession, user_id: int) -> dict:
         raise HTTPException(status_code=404, detail="Aucune séance terminée ou prévue à évaluer")
 
     seances = [_seance_to_eval_dict(s) for s in rows]
-    return await evaluate_sessions(db, user_id, seances)
+    return await evaluate_sessions(db, user_id, seances, job_id=job_id)
 
 
 # --- explain-exercises ----------------------------------------------------------
 
 
-async def explain_exercises(db: AsyncSession, user_id: int, exercices: list[dict]) -> dict:
+async def explain_exercises(
+    db: AsyncSession, user_id: int, exercices: list[dict], job_id: str | None = None
+) -> dict:
     start = time.perf_counter()
     context = await _require_context(db, user_id)
 
@@ -418,10 +497,14 @@ Exercices à expliquer (JSON) :
 Explique chaque exercice et renvoie le JSON demandé.
 """
 
-    raw = await generate_llm_prediction(
-        system_prompt=system_prompt, user_prompt=user_prompt, response_format=_EXPLAIN_SCHEMA
+    resp = await _call_llm_traced(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        response_format=_EXPLAIN_SCHEMA,
+        endpoint="explain-exercises",
+        response_model=ExplainExercisesResponse,
+        job_id=job_id,
     )
-    resp = _validate_llm(raw, ExplainExercisesResponse, "explain-exercises")
 
     await _trace_mongo(
         "explain-exercises",

@@ -1,11 +1,35 @@
+# ==============================================================================
+# Compose DEV — repo healthai-ai (stack IA tout-en-un, embarqué)
+#
+# Quand utiliser CE fichier (defaut) ?
+#   Pour developper sur le repo healthai-ai SANS dependre du repo healthai-infra.
+#   Il embarque tout localement : Postgres + Mongo + Ollama + gateway + vision +
+#   workout, sur un reseau Docker isole.
+#
+# Quand utiliser docker-compose.dev.yml a la place ?
+#   Quand healthai-infra tourne deja en parallele et expose Postgres. Le fichier
+#   .dev.yml ne lance PAS Postgres et pointe vers host.docker.internal:5432.
+#
+# Quand le vrai prod ?
+#   Voir healthai-infra/docker-compose.yml qui pull les images depuis ghcr.io.
+#   Aucun build local.
+#
+# /!\ Les ports des micro-services internes (vision 8001, workout 8002, mongo
+# 27017) sont publies sur l'hote pour faciliter le debug et l'acces direct au
+# Swagger. En PROD (healthai-infra), seul le gateway est expose ; vision /
+# workout / mongo / ollama restent sur le reseau interne.
+# ==============================================================================
+
 services:
-  # --- GATEWAY PRINCIPALE ---
+  # --- GATEWAY IA (FastAPI) ---
+  # En prod (healthai-infra), c'est ce service qui est exposé sous le nom
+  # `healthai-ai-gateway` et porte la validation JWKS Zitadel.
   healthai-api:
     build:
       context: .
       dockerfile: ./healthai-api/Dockerfile
     ports:
-      - "8000:8000"
+      - ${HEALTHAI_API_PORT:-8000}:8000
     env_file:
       - ./healthai-api/.env
     volumes:
@@ -17,7 +41,7 @@ services:
         "--host",
         "0.0.0.0",
         "--port",
-        "8000",
+        "${HEALTHAI_API_PORT:-8000}",
         "--reload",
       ]
     depends_on:
@@ -28,6 +52,8 @@ services:
       - internal
 
   # --- SERVICE VISION ---
+  # DEV uniquement : port 8001 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-vision:
     build:
       context: .
@@ -40,7 +66,7 @@ services:
     environment:
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
       - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache
@@ -55,6 +81,8 @@ services:
       - internal
 
   # --- SERVICE WORKOUT ---
+  # DEV uniquement : port 8002 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-workout:
     build:
       context: .
@@ -79,6 +107,9 @@ services:
       - internal
 
   # --- BASE DE DONNÉES NOSQL ---
+  # DEV uniquement : Mongo embarqué pour tests locaux des jobs IA.
+  # En prod, Mongo est provisionné par `healthai-infra` (compose central) et
+  # n'est pas publié sur l'hôte — vision/workout y accèdent via le réseau interne.
   mongo:
     image: mongo:7
     ports:

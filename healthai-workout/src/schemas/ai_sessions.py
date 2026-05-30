@@ -113,6 +113,17 @@ class JobCreatedResponse(BaseModel):
     status: str = "processing"
 
 
+class LLMCallTrace(BaseModel):
+    """Trace d'un appel Ollama (succès ou échec JSON) attachée à un job."""
+
+    system_prompt: str
+    user_prompt: str
+    raw_response: str | None = None
+    parsed_ok: bool
+    error: str | None = None
+    timestamp: datetime | None = None
+
+
 class JobStatusResponse(BaseModel):
     """État d'un job IA, interrogé via GET /ai/jobs/{job_id}."""
 
@@ -122,5 +133,6 @@ class JobStatusResponse(BaseModel):
     result: dict | None = None
     error: str | None = None
     error_code: int | None = None
+    llm_calls: list[LLMCallTrace] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

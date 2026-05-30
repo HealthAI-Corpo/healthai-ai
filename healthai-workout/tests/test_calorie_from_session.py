@@ -73,8 +73,11 @@ def test_predict_from_session_success(client):
         )
     )
 
-    r = client.post("/calorie-estimation/predict-from-session?user_id=1", json={"id_seance": 1})
-
+    r = client.post(
+        "/calorie-estimation/predict-from-session",
+        headers={"X-User-Id": "1"},
+        json={"id_seance": 1},
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["id_seance"] == 1
@@ -88,12 +91,26 @@ def test_predict_from_session_success(client):
 
 def test_predict_from_session_not_found(client):
     _override_db(_make_db([_result(scalar=None)]))
-    r = client.post("/calorie-estimation/predict-from-session?user_id=1", json={"id_seance": 999})
+    r = client.post(
+        "/calorie-estimation/predict-from-session",
+        headers={"X-User-Id": "1"},
+        json={"id_seance": 999},
+    )
     assert r.status_code == 404
+
+
+def test_predict_from_session_missing_header(client):
+    """Sans X-User-Id (devrait être injecté par la gateway), on renvoie 422."""
+    r = client.post("/calorie-estimation/predict-from-session", json={"id_seance": 1})
+    assert r.status_code == 422
 
 
 def test_predict_from_session_forbidden(client):
     # Séance appartenant à un autre utilisateur
     _override_db(_make_db([_result(scalar=_make_seance(id_utilisateur=2))]))
-    r = client.post("/calorie-estimation/predict-from-session?user_id=1", json={"id_seance": 1})
+    r = client.post(
+        "/calorie-estimation/predict-from-session",
+        headers={"X-User-Id": "1"},
+        json={"id_seance": 1},
+    )
     assert r.status_code == 403

@@ -13,7 +13,7 @@ from src.schemas import (
 from src.services.calorie_service import CalorieService
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/calorie-estimation", tags=["CaloriesIA"])
+router = APIRouter(prefix="/calorie-estimation", tags=["Calorie ML"])
 
 
 def get_calorie_service(request: Request) -> CalorieService:
@@ -23,7 +23,11 @@ def get_calorie_service(request: Request) -> CalorieService:
     return service
 
 
-@router.get("/model-info", response_model=ModelInfoResponse)
+@router.get(
+    "/model-info",
+    response_model=ModelInfoResponse,
+    summary="Métadonnées du modèle calories",
+)
 async def get_model_info(
     service: CalorieService = Depends(get_calorie_service),
 ) -> ModelInfoResponse:
@@ -39,7 +43,11 @@ async def get_model_info(
     )
 
 
-@router.get("/metrics", response_model=MetricsResponse)
+@router.get(
+    "/metrics",
+    response_model=MetricsResponse,
+    summary="Métriques d'évaluation du modèle",
+)
 async def get_metrics() -> MetricsResponse:
     # TODO : recup de healthai-workout\models\CaloriesIA_1_0_0\random_forest\metrics.json
     return MetricsResponse(
@@ -51,7 +59,15 @@ async def get_metrics() -> MetricsResponse:
     )
 
 
-@router.post("/predict", response_model=CalorieEstimationResponse)
+@router.post(
+    "/predict",
+    response_model=CalorieEstimationResponse,
+    summary="Prédiction de calories (toutes features fournies)",
+    description=(
+        "Estimation des calories brûlées à partir des 11 features biométriques + séance. "
+        "Aucune écriture en base, c'est une simulation."
+    ),
+)
 async def predict_calories(
     request: CalorieEstimationRequest,
     service: CalorieService = Depends(get_calorie_service),
@@ -65,7 +81,16 @@ async def predict_calories(
     )
 
 
-@router.post("/predict-with-defaults", response_model=CalorieEstimationWithDefaultsResponse)
+@router.post(
+    "/predict-with-defaults",
+    response_model=CalorieEstimationWithDefaultsResponse,
+    summary="Prédiction avec imputation automatique",
+    description=(
+        "Identique à `/predict` mais tous les champs sont optionnels — les valeurs absentes "
+        "ou null sont imputées par la moyenne du dataset d'entraînement. Utile depuis "
+        "un formulaire front partiellement rempli."
+    ),
+)
 async def predict_calories_with_defaults(
     request: CalorieEstimationWithDefaultsRequest,
     service: CalorieService = Depends(get_calorie_service),
