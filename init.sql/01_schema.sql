@@ -86,14 +86,18 @@ CREATE TABLE log_aliment (
 CREATE INDEX ix_log_aliment_id_log_aliment ON log_aliment (id_log_aliment);
 
 CREATE TABLE log_seance (
-    id_seance_log  SERIAL PRIMARY KEY,
-    log_date       TIMESTAMP     NOT NULL,
-    type_seance    VARCHAR(50),
-    duree_minutes  NUMERIC(5, 1) NOT NULL,
-    calorie_brulee NUMERIC(6, 1) NOT NULL,
-    bpm_moyen      INTEGER,
-    id_exercice    INTEGER       REFERENCES exercice (id_exercice),
-    id_utilisateur INTEGER       NOT NULL REFERENCES utilisateur (id_utilisateur) ON DELETE CASCADE
+    id_seance_log       SERIAL PRIMARY KEY,
+    log_date            TIMESTAMP     NOT NULL,
+    type_seance         VARCHAR(50),
+    duree_minutes       NUMERIC(5, 1) NOT NULL,
+    calorie_brulee      NUMERIC(6, 1),
+    bpm_moyen           INTEGER,
+    bpm_max             INTEGER,
+    consommation_eau_ml NUMERIC(7, 1),
+    exercices           JSONB,
+    statut              VARCHAR(20)   CHECK (statut IN ('proposee', 'prevue', 'en_cours', 'terminee')),
+    id_exercice         INTEGER       REFERENCES exercice (id_exercice),
+    id_utilisateur      INTEGER       NOT NULL REFERENCES utilisateur (id_utilisateur) ON DELETE CASCADE
 );
 CREATE INDEX ix_log_seance_id_seance_log ON log_seance (id_seance_log);
 

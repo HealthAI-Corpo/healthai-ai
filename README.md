@@ -1,183 +1,87 @@
 # healthai-ai
 
-Monorepo des micro-services IA — MSPR TPRE502.
+Monorepo des micro-services IA HealthAI — MSPR TPRE502.
 
-> Document indicatif. Les choix techniques peuvent évoluer lors de l'implémentation.
-
-# Stack technique commune
-
-- Langage : Python 3.12 (via uv)
-- Framework : FastAPI
-- Orchestration : Docker Compose (développement avec volumes miroirs)
-- Communication : HTTPX (appels asynchrones entre services)
-
-## Structure
-
-```text
-healthai-ai/
-├── healthai-api/ # GATEWAY : Point d'entrée unique du Front-end
-│ ├── src/
-│ │ ├── api/ # Routes REST et agrégation
-│ │ ├── core/ # Config (Zitadel, Secrets) et Sécurité
-│ │ ├── graphql/ # Schéma Strawberry (Fédère Vision + Workout)
-│ │ ├── services/ # Clients HTTP (Appels vers Vision/Workout)
-│ │ └── main.py # Lancement du serveur (Port 8000)
-│ ├── .env # URLs des micro-services et clés API
-│ ├── Dockerfile # Build léger pour la Gateway
-│ └── pyproject.toml # Dépendances (FastAPI, Strawberry, HTTPX)
-│
-├── healthai-vision/ # SERVICE IA : Analyse d'image & Nutrition
-│ ├── src/
-│ │ ├── api/ # Endpoint /analyze/meal
-│ │ ├── core/ # Configuration (Modèles HuggingFace)
-│ │ ├── infrastructure/ # Connexion Postgres (Table Aliment)
-│ │ ├── services/ # Logique IA (YOLO v8 / EfficientNet)
-│ │ └── main.py # Serveur (Port 8001)
-│ ├── .hf_cache/ # Cache local des modèles IA (évite le download)
-│ ├── Dockerfile # Build avec dépendances ML (Torch, OpenCV)
-│ └── pyproject.toml # Dépendances (Ultralytics, Transformers)
-│
-├── healthai-workout/ # SERVICE IA : Moteur de recommandation
-│ ├── src/
-│ │ ├── api/ # Endpoint /recommend/workout
-│ │ ├── core/ # Configuration (Chemin modèle .joblib)
-│ │ ├── infrastructure/ # Connexion MongoDB (Historique NoSQL)
-│ │ ├── services/ # Logique IA (Scikit-learn Fine-tuning)
-│ │ └── main.py # Serveur (Port 8002)
-│ ├── models/ # Stockage des modèles entraînés (.joblib)
-│ ├── Dockerfile # Build avec Scikit-learn & Pandas
-│ └── pyproject.toml # Dépendances (Sklearn, Motor, Asyncpg)
-│
-├── docker-compose.yml # Orchestration (API + Vision + Workout + DBs)
-└── .gitignore # Exclusion des .env, .venv et caches IA
-```
-
-# Pré-requis
-
-- Avoir Docker et Docker Desktop installés.
-- Installer uv sur votre machine locale (optionnel, pour la gestion des locks).
-
-# Configuration
-
-Pour chaque service (healthai-api, healthai-vision, healthai-workout), créer un fichier .env basé sur les besoins de configuration (voir src/core/config.py).
-
-# Lancement
-
-docker compose up --build (le build sera long la première fois à cause des dépendances)
-docker compose up
-
-les services accessible seront donc :
-
-- http://localhost:8000/docs
-- http://localhost:8001/docs
-- http://localhost:8002/docs
-
-Route de test healcheck des :
-curl http://localhost:8000/test-internal
-
-réponse attendue :
-{
-"gateway": "OK",
-"vision_service": {"status": "online", ...},
-"workout_service": {"status": "online", ...}
-}
-
-# Securité
-
-Gerée par le gateway (healthai-api) config controle le JWT user et la config zitadel
+Python 3.12 + FastAPI + `uv`, orchestré par Docker Compose. Le déploiement
+production est géré dans le repo `healthai-infra` (qui pull les images ghcr.io
+construites depuis ce repo).
 
 ## Services
 
-### `healthai-vision` — Analyse nutritionnelle par photo (port 8001)
+| Package                                    | Rôle                                                                     | Port |
+| ------------------------------------------ | ------------------------------------------------------------------------ | ---- |
+| `healthai-api`                             | Gateway publique : auth Zitadel + reverse proxy `/vision/*` `/workout/*` | 8000 |
+| `healthai-vision`                          | Analyse photo de repas (YOLO) + conseils + suggestion recettes           | 8001 |
+| `healthai-workout`                         | Estimation calories ML + génération/évaluation séances + reco            | 8002 |
+| `healthai-common`                          | Lib partagée (client Ollama) — path dependency                           | —    |
+| `healthai-training-ia-calories-estimation` | Pipeline ML offline (génère le modèle CaloriesIA)                        | —    |
 
-Identifie les aliments dans une photo de repas et calcule les macronutriments.
+## Démarrage
 
-**Stack :** Framework : FastAPI
+Pré-requis : Docker, [uv](https://docs.astral.sh/uv/).
 
-- IA : Ultralytics YOLOv8 (Modèle yolov8n.pt)
-- Traitement d'image : Pillow & OpenCV (headless)
-- Runtime : Python 3.12 (via uv)
+```powershell
+# 1. Recopier les .env.example
+Get-ChildItem -Recurse -Filter ".env.example" `
+  | Where-Object { $_.FullName -notmatch "\.venv" } `
+  | ForEach-Object { Copy-Item $_.FullName ($_.FullName -replace ".env.example$", ".env") -Force }
 
-**Points d'attention :**
+# 2a. Stack 100 % embarquée (Postgres + Mongo + Ollama locaux)
+docker compose up -d --build
+#   gateway → http://localhost:8000/docs
+#   vision  → http://localhost:8001/docs
+#   workout → http://localhost:8002/docs
 
-- Dépendances système : Le Dockerfile doit inclure libgl1 et libglib2.0-0 pour qu'OpenCV puisse fonctionner en environnement Linux Slim.
-- Cache Modèle : Le fichier poids du modèle (.pt) est stocké dans le conteneur. Une persistence via volume est recommandée pour éviter le re-téléchargement au reboot.
-- Seuil de confiance : Actuellement fixé à 0.5 pour éviter les faux positifs (ex: confusion entre pomme et orange sur des scores faibles).
-- Sérialisation : Conversion automatique des types Numeric/Decimal de PostgreSQL vers float pour la compatibilité JSON.
-
-**État de l'implémentation :**
-
-- [x] Configuration de l'environnement Docker avec dépendances système (libgl1).
-- [x] Chargement asynchrone du modèle YOLOv8 au démarrage (Singleton).
-- [x] Endpoint POST /analyze fonctionnel (acceptation d'images, détection et filtrage par confiance > 0.5).
-- [x] Mapping des labels anglais YOLO vers la table PostgreSQL aliment.
-- [x] Calcul des macronutriments agrégés.
-
-**Installation & Lancement spécifique :**
-
-Le service nécessite des bibliothèques de calcul lourdes (Torch). Le premier build peut prendre environ 10-15 minutes.
-
-- docker compose up --build healthai-vision
-
-**Flux de données actuel :**
-Client (Image) → POST /analyze → YOLOv8 (Inference) → SQLAlchemy Async (Query WHERE lower(trim(nom))) → Dictionnaire Enrichi (Nutrition Data) → JSON final.
-
----
-
-### `healthai-workout` — Recommandation sportive (port 8002)
-
-Génère un programme d'entraînement personnalisé selon le profil utilisateur.
-
-**Stack envisagée :** FastAPI · Scikit-learn · MongoDB (Motor async) · PostgreSQL · uv
-
-**Flux principal :**
-
-```
-POST /recommend/workout (objectif, niveau, équipements) → feature vector → modèle → programme hebdomadaire → MongoDB
+# 2b. Alternative : si healthai-infra tourne déjà à côté
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-**Document MongoDB (structure indicative) :**
+Le premier build prend ~10-15 min (vision pulle Torch + YOLO).
 
-```json
-{
-  "utilisateur_id": "uuid",
-  "objectif": "perte_poids",
-  "niveau": "intermediaire",
-  "programme": {
-    "semaine": 1,
-    "seances": [{ "jour": "lundi", "exercices": [...] }]
-  },
-  "metrics": { "model_version": "1.0.0", "confidence_score": 0.87 }
-}
+## Documentation
+
+- **[API.md](./API.md)** — contrat d'API détaillé (workout + vision), via la gateway.
+- Swagger UI de chaque service : `/docs` sur le port correspondant.
+
+## Tests + lint
+
+```powershell
+# Par service (workout, vision, common, api)
+cd healthai-workout
+uv sync --reinstall-package healthai-common   # apres modif healthai-common
+uv run pytest -q
+uv run ruff check src/ tests/
 ```
 
----
+## Architecture rapide
 
-## Migrations BDD à prévoir
-
-| Fichier                                    | Contenu                                      |
-| ------------------------------------------ | -------------------------------------------- |
-| `000006_analyse_repas.up.sql`              | Cache + historique analyses photos           |
-| `000007_historique_recommandations.up.sql` | Trace recommandations (ref ObjectId MongoDB) |
-
----
-
-## Démarrage local
-
-```bash
-cp healthai-vision/.env.example healthai-vision/.env
-cp healthai-workout/.env.example healthai-workout/.env
-# Éditer les .env avec les valeurs locales
-docker compose up -d
+```
+                    +------------------+
+   front  --JWT-->  | healthai-api     |
+                    | (gateway 8000)   |
+                    +--------+---------+
+                             |
+                X-User-Id injecté après auth Zitadel
+                             |
+              +--------------+--------------+
+              v                             v
+     +-----------------+           +-----------------+
+     | healthai-vision |           | healthai-workout|
+     | (8001)          |           | (8002)          |
+     +--------+--------+           +--------+--------+
+              |                             |
+              +-------------+---------------+
+                            v
+                   +----------------+
+                   |  Ollama        |
+                   |  Mongo (jobs)  |
+                   |  Postgres      |
+                   +----------------+
 ```
 
----
+## Déploiement
 
-## Tâches backlog
-
-| #   | Service                                   | Statut                   |
-| --- | ----------------------------------------- | ------------------------ |
-| 1   | Vision Alimentaire (`healthai-vision`)    | À faire                  |
-| 2   | Moteur Reco Sportive (`healthai-workout`) | À faire                  |
-| 3   | Métriques IA (precision/recall/F1)        | À faire                  |
-| 5   | Micro-service isolé (`healthai-workout`)  | À faire (inclus dans #2) |
+Aucun build à faire ici pour la prod. Le pipeline CI pousse les images sur
+`ghcr.io/healthai-corpo/{healthai-ai-gateway,healthai-vision,healthai-workout}`,
+et le compose `healthai-infra/docker-compose.yml` les pull. Voir le repo
+`healthai-infra` pour les variables d'env Zitadel et l'isolation réseau.

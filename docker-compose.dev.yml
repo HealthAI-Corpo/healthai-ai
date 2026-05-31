@@ -1,0 +1,141 @@
+# Identique au docker-compose.yml commun, SAUF la base PostgreSQL :
+# ici on n'embarque PAS de Postgres. On se branche sur la DB de healthai-infra
+# qui tourne en local et contient déjà les données de test, via host.docker.internal:5432.
+# Tout le reste (vision, workout, gateway, mongo, ollama) est identique au compose commun.
+services:
+  # --- GATEWAY PRINCIPALE ---
+  # context = racine du repo car le Dockerfile copie aussi `healthai-common` (path dep).
+  healthai-api:
+    build:
+      context: .
+      dockerfile: ./healthai-api/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./healthai-api/.env
+    volumes:
+      - ./healthai-api/src:/app/src
+    # uvicorn est sur le PATH via le venv (/app/.venv/bin) ; l'image runner ne contient pas `uv`.
+    command:
+      [
+        "uvicorn",
+        "src.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+    depends_on:
+      - healthai-vision
+      - healthai-workout
+    networks:
+      - internal
+
+  # --- SERVICE VISION ---
+  healthai-vision:
+    build:
+      context: .
+      dockerfile: ./healthai-vision/Dockerfile
+    init: true
+    ports:
+      - "${HEALTHAI_VISION_PORT:-8001}:8001"
+    env_file:
+      - ./healthai-vision/.env
+    environment:
+      # DB = infra locale (données de test) atteinte via l'hôte
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:3f76fa376bff2705a0216cda224680ff95e0a4d5fb9953dfc8050034034518e6@host.docker.internal:5432/healthai_db}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
+      - OLLAMA_KEEP_ALIVE=24h
+      - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
+      - HF_CACHE_DIR=/app/.hf_cache
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./healthai-vision/src:/app/src
+      - hf_cache:/app/.hf_cache
+    depends_on:
+      - mongo
+      - ollama
+    networks:
+      - internal
+
+  # --- SERVICE WORKOUT ---
+  healthai-workout:
+    build:
+      context: .
+      dockerfile: ./healthai-workout/Dockerfile
+    init: true
+    ports:
+      - "${HEALTHAI_WORKOUT_PORT:-8002}:8002"
+    env_file:
+      - ./healthai-workout/.env
+    environment:
+      # DB = infra locale (données de test) atteinte via l'hôte
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:3f76fa376bff2705a0216cda224680ff95e0a4d5fb9953dfc8050034034518e6@host.docker.internal:5432/healthai_db}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./healthai-workout/src:/app/src
+    depends_on:
+      - mongo
+      - ollama
+    networks:
+      - internal
+
+  # --- BASE DE DONNÉES NOSQL ---
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - internal
+
+  # NB : pas de service `postgres` ici — on utilise la DB de healthai-infra
+  # (host.docker.internal:5432) qui contient déjà les données de test.
+
+  # --- SERVICE LLM CENTRALISÉ ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - internal
+    command: ["serve"]
+
+  # --- TÉLÉCHARGEMENT AUTOMATIQUE DU MODÈLE SLM ---
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama-pull
+    # Le CLI `ollama` doit pointer vers le serveur (service `ollama`), pas son propre conteneur.
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - internal
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_storage:/root/.ollama
+    entrypoint: /bin/sh
+    # Attend que le serveur réponde, puis pull le modèle (pas de sleep arbitraire).
+    command: -c "until ollama list >/dev/null 2>&1; do echo 'attente du serveur ollama...'; sleep 2; done && ollama pull llama3.2:3b"
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  hf_cache:
+  ollama_storage:

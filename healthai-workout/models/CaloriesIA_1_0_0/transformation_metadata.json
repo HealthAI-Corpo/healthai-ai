@@ -1,0 +1,80 @@
+{
+  "encoders": {
+    "sexe": {
+      "M": 0,
+      "m": 0,
+      "male": 0,
+      "Male": 0,
+      "F": 1,
+      "f": 1,
+      "female": 1,
+      "Female": 1
+    },
+    "type_sport": {
+      "Cardio": 0,
+      "HIIT": 0,
+      "Strength": 1,
+      "Yoga": 1
+    }
+  },
+  "scaler_stats": {
+    "imc": {
+      "mean": 23.702760086558747,
+      "std": 7.362669343463296
+    },
+    "age": {
+      "mean": 36.030565461029035,
+      "std": 12.424241461358383
+    },
+    "sexe": {
+      "mean": 0.4905756495160469,
+      "std": 0.4999111737278489
+    },
+    "bpm_max": {
+      "mean": 179.96535914416708,
+      "std": 11.569270089481183
+    },
+    "bpm_moyen": {
+      "mean": 145.01630157921548,
+      "std": 14.984343643674197
+    },
+    "bpm_repos": {
+      "mean": 63.1935812531839,
+      "std": 7.808209139506387
+    },
+    "duree_seance_minutes": {
+      "mean": 80.57544574630668,
+      "std": 22.08073520712798
+    },
+    "type_sport": {
+      "mean": 0.5124808965868568,
+      "std": 0.4998442029476667
+    },
+    "pourcentage_gras": {
+      "mean": 24.14523688232298,
+      "std": 6.080242967303324
+    },
+    "consommation_eau_ml": {
+      "mean": 2677.177789098319,
+      "std": 669.8581311892306
+    },
+    "niveau_experience": {
+      "mean": 1.7809475292919001,
+      "std": 0.7739411735986771
+    }
+  },
+  "features_cols_order": [
+    "imc",
+    "age",
+    "sexe",
+    "bpm_max",
+    "bpm_moyen",
+    "bpm_repos",
+    "duree_seance_minutes",
+    "type_sport",
+    "pourcentage_gras",
+    "consommation_eau_ml",
+    "niveau_experience"
+  ],
+  "n_features": 11
+}

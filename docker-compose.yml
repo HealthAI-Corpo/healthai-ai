@@ -1,69 +1,93 @@
+# ==============================================================================
+# Compose DEV — repo healthai-ai (stack IA tout-en-un, embarqué)
+#
+# Quand utiliser CE fichier (defaut) ?
+#   Pour developper sur le repo healthai-ai SANS dependre du repo healthai-infra.
+#   Il embarque tout localement : Postgres + Mongo + Ollama + gateway + vision +
+#   workout, sur un reseau Docker isole.
+#
+# Quand utiliser docker-compose.dev.yml a la place ?
+#   Quand healthai-infra tourne deja en parallele et expose Postgres. Le fichier
+#   .dev.yml ne lance PAS Postgres et pointe vers host.docker.internal:5432.
+#
+# Quand le vrai prod ?
+#   Voir healthai-infra/docker-compose.yml qui pull les images depuis ghcr.io.
+#   Aucun build local.
+#
+# /!\ Les ports des micro-services internes (vision 8001, workout 8002, mongo
+# 27017) sont publies sur l'hote pour faciliter le debug et l'acces direct au
+# Swagger. En PROD (healthai-infra), seul le gateway est expose ; vision /
+# workout / mongo / ollama restent sur le reseau interne.
+# ==============================================================================
+
 services:
-  # --- GATEWAY PRINCIPALE ---
+  # --- GATEWAY IA (FastAPI) ---
+  # En prod (healthai-infra), c'est ce service qui est exposé sous le nom
+  # `healthai-ai-gateway` et porte la validation JWKS Zitadel.
   healthai-api:
-    build: ./healthai-api
+    build:
+      context: .
+      dockerfile: ./healthai-api/Dockerfile
     ports:
-      - "8000:8000"
+      - ${HEALTHAI_API_PORT:-8000}:8000
     env_file:
       - ./healthai-api/.env
-    # Montage du dossier src local vers le dossier app dans le conteneur
     volumes:
       - ./healthai-api/src:/app/src
-    # Force le rechargement automatique du serveur au changement de code
     command:
       [
-        "uv",
-        "run",
         "uvicorn",
         "src.main:app",
         "--host",
         "0.0.0.0",
         "--port",
-        "8000",
+        "${HEALTHAI_API_PORT:-8000}",
         "--reload",
       ]
     depends_on:
       - healthai-vision
-      - healthai-workout
+      #- healthai-workout
       - postgres
     networks:
       - internal
 
   # --- SERVICE VISION ---
+  # DEV uniquement : port 8001 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-vision:
-    build: ./healthai-vision
+    build:
+      context: .
+      dockerfile: ./healthai-vision/Dockerfile
+    init: true
     ports:
       - "${HEALTHAI_VISION_PORT:-8001}:8001"
     env_file:
       - ./healthai-vision/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
+      - OLLAMA_KEEP_ALIVE=24h
       - HF_MODEL_NAME=${HF_MODEL_NAME:-yolov8n.pt}
       - HF_CACHE_DIR=/app/.hf_cache
     volumes:
       - ./healthai-vision/src:/app/src
       - hf_cache:/app/.hf_cache
-    command:
-      [
-        "uv",
-        "run",
-        "uvicorn",
-        "src.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8001",
-        "--reload",
-      ]
     depends_on:
       - postgres
+      - mongo
+      - ollama
     networks:
       - internal
 
   # --- SERVICE WORKOUT ---
+  # DEV uniquement : port 8002 publié pour accès direct au Swagger.
+  # En prod (healthai-infra) : pas de `ports:`, accessible seulement depuis le gateway.
   healthai-workout:
-    build: ./healthai-workout
+    build:
+      context: .
+      dockerfile: ./healthai-workout/Dockerfile
+    init: true
     ports:
       - "${HEALTHAI_WORKOUT_PORT:-8002}:8002"
     env_file:
@@ -71,26 +95,21 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthai:healthai@postgres:5432/healthai_db}
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
-    volumes:
-      - ./healthai-workout/src:/app/src
-    command:
-      [
-        "uv",
-        "run",
-        "uvicorn",
-        "src.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8002",
-        "--reload",
-      ]
+      - OLLAMA_BASE_URL=http://healthai-ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+    #volumes:
+    #- ./healthai-workout/src:/app/src
     depends_on:
       - postgres
       - mongo
+      - ollama
     networks:
       - internal
 
+  # --- BASE DE DONNÉES NOSQL ---
+  # DEV uniquement : Mongo embarqué pour tests locaux des jobs IA.
+  # En prod, Mongo est provisionné par `healthai-infra` (compose central) et
+  # n'est pas publié sur l'hôte — vision/workout y accèdent via le réseau interne.
   mongo:
     image: mongo:7
     ports:
@@ -100,25 +119,57 @@ services:
     networks:
       - internal
 
+  # --- BASE DE DONNÉES RELATIONNELLE ---
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: healthai
-      POSTGRES_PASSWORD: healthai
-      POSTGRES_DB: healthai_db
+      POSTGRES_USER: ${POSTGRES_USER:-healthai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthai}
+      POSTGRES_DB: ${POSTGRES_DB:-healthai_db}
     ports:
       - "5433:5432"
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d:ro
-      - pg-data:/var/lib/postgresql/data #
+      - pg-data:/var/lib/postgresql/data
     networks:
       - internal
+
+  # --- SERVICE LLM CENTRALISÉ ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - internal
+    command: ["serve"]
+
+  # --- TÉLÉCHARGEMENT AUTOMATIQUE DU MODÈLE SLM ---
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    container_name: healthai-ollama-pull
+    # Le CLI `ollama` doit pointer vers le serveur (service `ollama`), pas son propre conteneur.
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - internal
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_storage:/root/.ollama
+    entrypoint: /bin/sh
+    # Attend que le serveur réponde, puis pull le modèle (pas de sleep arbitraire).
+    command: -c "until ollama list >/dev/null 2>&1; do echo 'attente du serveur ollama...'; sleep 2; done && ollama pull llama3.2:3b"
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   mongo-data:
   pg-data:
   hf_cache:
-
-networks:
-  internal:
-    driver: bridge
+  ollama_storage:

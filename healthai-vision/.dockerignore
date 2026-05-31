@@ -1,0 +1,13 @@
+# Éléments locaux Python à ignorer absolument
+.venv/
+__pycache__/
+*.pyc
+
+# Environnement et Git
+.git/
+.env
+
+# Données lourdes et fichiers temporaires (Modèles IA)
+*.pt
+outputs/
+data/

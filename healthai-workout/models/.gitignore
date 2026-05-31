@@ -1,0 +1,3 @@
+# Fichiers modèles sérialisés — non versionnés (trop lourds, régénérables)
+# Générer avec : uv run python scripts/train_calorie_model.py
+*.pkl
