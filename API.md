@@ -43,10 +43,12 @@ Chaque service expose son propre Swagger UI :
 
 Header `Authorization: Bearer <jwt>` sur toutes les routes proxifiées.
 
-La gateway valide le JWT (signature JWKS, issuer, audience, expiration), résout
-l'`id_utilisateur` Postgres depuis le claim `email`, puis injecte `X-User-Id`
-côté interne. **Le client n'envoie jamais `X-User-Id`** — la gateway le strip
-de toute manière.
+La gateway valide le JWT (signature JWKS, issuer, audience, expiration), récupère
+l'email (mode `jwks` : via l'endpoint userinfo Zitadel, car l'access token ne le
+porte pas ; mode `id_token` : directement dans le claim `email`), résout
+l'`id_utilisateur` Postgres depuis cet email, puis injecte `X-User-Id` côté
+interne. **Le client n'envoie jamais `X-User-Id`** — la gateway le strip de
+toute manière.
 
 ### Dev local (mode `dev_stub`)
 

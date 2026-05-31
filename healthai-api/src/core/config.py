@@ -12,8 +12,12 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = ""
 
-    # AUTH_MODE = "jwks" : valide les tokens Zitadel via JWKS (production / infra).
-    # AUTH_MODE = "dev_stub" : court-circuite l'auth, utile pour dev local sans Zitadel.
+    # Trois modes d'authentification :
+    # - "jwks"     : valide l'ACCESS TOKEN Zitadel via JWKS puis resout l'email via
+    #                l'endpoint userinfo (design cible / production). Defaut infra.
+    # - "id_token" : valide un ID TOKEN Zitadel et lit l'email directement dans le
+    #                claim `email` (depannage / transition — peut etre retire ensuite).
+    # - "dev_stub" : court-circuite l'auth, utile pour dev local sans Zitadel.
     AUTH_MODE: str = "dev_stub"
     DEV_STUB_USER_ID: int = 1
     DEV_STUB_USER_EMAIL: str = "dev@healthai.local"
