@@ -16,6 +16,15 @@ RUN uv sync --no-dev
 
 COPY healthai-workout/src/ ./src/
 COPY healthai-workout/models/ ./models/
+COPY healthai-workout/scripts/ ./scripts/
+
+# Les .pkl ne sont pas versionnés (cf. models/.gitignore) : on régénère les deux
+# modèles à partir des training_data committées pour que l'image soit autonome.
+# - calorie  : requis (sinon le lifespan crashe au boot, FileNotFoundError model.pkl)
+# - reco     : bonus, mais on le veut présent dans l'image
+# Entraînement déterministe (random_state=42), sans accès base de données.
+RUN uv run --no-dev python scripts/train_calorie_model.py \
+    && uv run --no-dev python scripts/train_recommendation_model.py
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
