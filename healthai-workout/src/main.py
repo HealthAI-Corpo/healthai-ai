@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pickle
 from contextlib import asynccontextmanager
@@ -9,6 +10,10 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.core.config import settings
+from src.core.rabbitmq import close as rmq_close
+from src.core.rabbitmq import connect as rmq_connect
+from src.core.rabbitmq import is_available as rmq_available
+from src.core.rabbitmq import start_worker
 from src.database_mongo import mongo_db
 from src.routers.ai_sessions import router as ai_sessions_router
 from src.routers.calorie_estimation import router as calorie_router
@@ -27,8 +32,74 @@ def _load_artifact(path: Path):
             return pickle.load(f)
 
 
+async def _dispatch_job(message: dict) -> None:
+    """Dispatch un message RabbitMQ vers le service métier correspondant."""
+    from src.services import ai_session_service, job_service  # import local
+
+    job_id = message["job_id"]
+    job_type = message["job_type"]
+    user_id = message["user_id"]
+    payload = message.get("payload", {})
+
+    dispatch_map = {
+        "generate-session": lambda db: ai_session_service.generate_session(
+            db=db,
+            user_id=user_id,
+            contraintes=payload.get("contraintes", {}),
+            sauvegarder=payload.get("sauvegarder", False),
+            job_id=job_id,
+        ),
+        "evaluate-sessions": lambda db: ai_session_service.evaluate_sessions_by_ids(
+            db=db,
+            user_id=user_id,
+            ids_seances=payload.get("ids_seances", []),
+            job_id=job_id,
+        ),
+        "evaluate-recent-sessions": lambda db: ai_session_service.evaluate_recent_sessions(
+            db=db, user_id=user_id, job_id=job_id
+        ),
+        "explain-exercises": lambda db: ai_session_service.explain_exercises(
+            db=db,
+            user_id=user_id,
+            exercices=payload.get("exercices", []),
+            job_id=job_id,
+        ),
+        "recommend-workout": lambda db: _dispatch_recommendation(db, user_id, job_id),
+    }
+
+    work = dispatch_map.get(job_type)
+    if work is None:
+        logger.warning("Type de job inconnu : {}", job_type)
+        return
+    await job_service.run_in_background(job_id, work)
+
+
+async def _dispatch_recommendation(db, user_id: int, job_id: str) -> dict:
+    from src.services.context_service import build_recommendation_profile
+    from fastapi import HTTPException
+
+    service = getattr(_app_state, "recommendation_service", None)
+    if service is None:
+        raise HTTPException(status_code=503, detail="Modèle de recommandation non chargé.")
+    profile = await build_recommendation_profile(db, user_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    result = await service.generate(profile, job_id=job_id)
+    from src.schemas.recommendation import WorkoutRecommendationResponse
+    return WorkoutRecommendationResponse(
+        status="success",
+        predictions_classifier=result["predictions_classifier"],
+        seance=result["seance"],
+    ).model_dump()
+
+
+_app_state = None  # référence à app.state pour le dispatch recommendation
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _app_state
+    _app_state = app.state
     await mongo_db.connect()
 
     base_dir = Path(__file__).parent.parent
@@ -61,8 +132,18 @@ async def lifespan(app: FastAPI):
         logger.warning("RecommendationService non chargé : {}", e)
         app.state.recommendation_service = None
 
+    # RabbitMQ — connexion + worker en tâche de fond
+    await rmq_connect()
+    worker_task: asyncio.Task | None = None
+    if rmq_available():
+        worker_task = asyncio.create_task(start_worker(_dispatch_job))
+        logger.info("Worker RabbitMQ lancé")
+
     yield
 
+    if worker_task and not worker_task.done():
+        worker_task.cancel()
+    await rmq_close()
     mongo_db.close()
     logger.info("Shutdown complet")
 

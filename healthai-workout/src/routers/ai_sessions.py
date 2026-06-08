@@ -1,5 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
+from src.core.rabbitmq import is_available as rmq_available
 from src.schemas.ai_sessions import (
     EvaluateSessionsRequest,
     ExplainExercisesRequest,
@@ -13,10 +14,10 @@ from src.services.job_service import require_mongo
 router = APIRouter(prefix="/ai", tags=["AI Sessions"])
 
 # Le header X-User-Id est injecté par la gateway après validation JWT Zitadel.
-
-# Les appels Ollama sont lents : ces routes ne bloquent pas. Elles créent un job, lancent
-# le travail en tâche de fond et renvoient un job_id (202). Le front interroge ensuite
-# GET /ai/jobs/{job_id} jusqu'à status="completed". Mongo est requis (sinon 503).
+#
+# Dispatch des jobs LLM :
+#   - RabbitMQ disponible (RABBITMQ_URL) : publish → worker consomme avec prefetch=1
+#   - RabbitMQ absent                    : fallback FastAPI BackgroundTasks (dev local)
 
 
 @router.post(
@@ -40,17 +41,20 @@ async def generate_session(
 ) -> JobCreatedResponse:
     job_id = await job_service.create_job("generate-session", x_user_id)
     contraintes = payload.model_dump()
-    background_tasks.add_task(
-        job_service.run_in_background,
-        job_id,
-        lambda db: ai_session_service.generate_session(
-            db=db,
-            user_id=x_user_id,
-            contraintes=contraintes,
-            sauvegarder=sauvegarder,
-            job_id=job_id,
-        ),
-    )
+    if rmq_available():
+        await job_service.publish_job(
+            job_id, "generate-session", x_user_id,
+            {"contraintes": contraintes, "sauvegarder": sauvegarder},
+        )
+    else:
+        background_tasks.add_task(
+            job_service.run_in_background,
+            job_id,
+            lambda db: ai_session_service.generate_session(
+                db=db, user_id=x_user_id, contraintes=contraintes,
+                sauvegarder=sauvegarder, job_id=job_id,
+            ),
+        )
     return JobCreatedResponse(job_id=job_id)
 
 
@@ -73,13 +77,18 @@ async def evaluate_sessions(
 ) -> JobCreatedResponse:
     job_id = await job_service.create_job("evaluate-sessions", x_user_id)
     ids = payload.ids_seances
-    background_tasks.add_task(
-        job_service.run_in_background,
-        job_id,
-        lambda db: ai_session_service.evaluate_sessions_by_ids(
-            db=db, user_id=x_user_id, ids_seances=ids, job_id=job_id
-        ),
-    )
+    if rmq_available():
+        await job_service.publish_job(
+            job_id, "evaluate-sessions", x_user_id, {"ids_seances": ids},
+        )
+    else:
+        background_tasks.add_task(
+            job_service.run_in_background,
+            job_id,
+            lambda db: ai_session_service.evaluate_sessions_by_ids(
+                db=db, user_id=x_user_id, ids_seances=ids, job_id=job_id
+            ),
+        )
     return JobCreatedResponse(job_id=job_id)
 
 
@@ -100,13 +109,18 @@ async def evaluate_my_recent_sessions(
     _: None = Depends(require_mongo),
 ) -> JobCreatedResponse:
     job_id = await job_service.create_job("evaluate-recent-sessions", x_user_id)
-    background_tasks.add_task(
-        job_service.run_in_background,
-        job_id,
-        lambda db: ai_session_service.evaluate_recent_sessions(
-            db=db, user_id=x_user_id, job_id=job_id
-        ),
-    )
+    if rmq_available():
+        await job_service.publish_job(
+            job_id, "evaluate-recent-sessions", x_user_id, {},
+        )
+    else:
+        background_tasks.add_task(
+            job_service.run_in_background,
+            job_id,
+            lambda db: ai_session_service.evaluate_recent_sessions(
+                db=db, user_id=x_user_id, job_id=job_id
+            ),
+        )
     return JobCreatedResponse(job_id=job_id)
 
 
@@ -129,13 +143,18 @@ async def explain_exercises(
 ) -> JobCreatedResponse:
     job_id = await job_service.create_job("explain-exercises", x_user_id)
     exercices = [e.model_dump() for e in payload.exercices]
-    background_tasks.add_task(
-        job_service.run_in_background,
-        job_id,
-        lambda db: ai_session_service.explain_exercises(
-            db=db, user_id=x_user_id, exercices=exercices, job_id=job_id
-        ),
-    )
+    if rmq_available():
+        await job_service.publish_job(
+            job_id, "explain-exercises", x_user_id, {"exercices": exercices},
+        )
+    else:
+        background_tasks.add_task(
+            job_service.run_in_background,
+            job_id,
+            lambda db: ai_session_service.explain_exercises(
+                db=db, user_id=x_user_id, exercices=exercices, job_id=job_id
+            ),
+        )
     return JobCreatedResponse(job_id=job_id)
 
 

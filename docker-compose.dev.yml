@@ -59,6 +59,7 @@ services:
     depends_on:
       - mongo
       - ollama
+      - rabbitmq
     networks:
       - internal
 
@@ -78,6 +79,7 @@ services:
       - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
       - OLLAMA_BASE_URL=http://healthai-ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-healthai}:${RABBITMQ_PASSWORD:-healthai_dev}@rabbitmq:5672/healthai
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -85,8 +87,29 @@ services:
     depends_on:
       - mongo
       - ollama
+      - rabbitmq
     networks:
       - internal
+
+  # --- BUS DE MESSAGES ---
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-healthai}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-healthai_dev}
+      RABBITMQ_DEFAULT_VHOST: healthai
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- BASE DE DONNÉES NOSQL ---
   mongo:
@@ -139,3 +162,4 @@ volumes:
   mongo-data:
   hf_cache:
   ollama_storage:
+  rabbitmq-data:

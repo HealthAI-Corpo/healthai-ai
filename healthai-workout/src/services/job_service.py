@@ -2,15 +2,15 @@
 
 Les appels Ollama sont lents (chargement modèle CPU, jusqu'à 180 s). Plutôt que de
 bloquer la requête, les routes créent un job (status="processing"), délèguent le
-travail à une BackgroundTask, et renvoient immédiatement un job_id. Le front interroge
-ensuite GET /ai/jobs/{job_id} jusqu'à status="completed" (ou "failed").
+travail à une BackgroundTask ou à RabbitMQ, et renvoient immédiatement un job_id.
+Le front interroge ensuite GET /ai/jobs/{job_id} jusqu'à status="completed" (ou "failed").
 
-Le résultat est stocké dans Mongo (collection `ai_jobs`). Ce stockage est donc REQUIS
-pour le mode async : `require_mongo` renvoie 503 si Mongo est indisponible.
+Deux modes selon la disponibilité de RabbitMQ (RABBITMQ_URL) :
+  - RabbitMQ disponible : le message est publié dans la queue `healthai.ai.jobs.workout`,
+    consommé par le worker interne avec prefetch_count=1 (Ollama ne sature pas sous charge).
+  - RabbitMQ absent     : fallback sur FastAPI BackgroundTasks (dev sans broker).
 
-Le document Mongo porte aussi `id_utilisateur` (propriétaire) et un historique
-`llm_calls` (prompts envoyés + réponses brutes du LLM, succès et échecs) pour le
-debug et la traçabilité.
+Le résultat est stocké dans Mongo (collection `ai_jobs`) dans les deux cas.
 """
 
 from collections.abc import Awaitable, Callable
@@ -115,6 +115,15 @@ async def record_llm_call(
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("Trace LLM du job {} échouée : {}", job_id, e)
+
+
+async def publish_job(job_id: str, job_type: str, user_id: int, payload: dict) -> None:
+    """Publie le job dans RabbitMQ pour traitement par le worker."""
+    from src.core.rabbitmq import publish  # import local pour éviter le circular
+
+    await publish(
+        {"job_id": job_id, "job_type": job_type, "user_id": user_id, "payload": payload}
+    )
 
 
 async def run_in_background(job_id: str, work: Callable[[AsyncSession], Awaitable[dict]]) -> None:

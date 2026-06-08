@@ -23,5 +23,8 @@ class Settings(BaseSettings):
     # Modèle ML calories
     MODEL_PATH: str = "/app/models/CaloriesIA_1_0_0/random_forest/model.pkl"
 
+    # RabbitMQ — bus de messages (optionnel : vide = fallback BackgroundTasks)
+    RABBITMQ_URL: str = ""
+
 
 settings = Settings()
