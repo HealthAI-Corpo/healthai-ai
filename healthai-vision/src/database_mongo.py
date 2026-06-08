@@ -1,25 +1,32 @@
-import os
-
+from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient
+
+from src.core.config import settings
 
 
 class MongoDBManager:
     def __init__(self):
-        self.client = None
+        self.client: AsyncIOMotorClient | None = None
         self.db = None
 
-    def connect(self):
-        # On récupère l'URL de l'env (configurée dans le docker-compose)
-        mongo_url = os.getenv("MONGODB_URL", "mongodb://mongo:27017")
-        self.client = AsyncIOMotorClient(mongo_url)
-        # On définit le nom de la base de données
-        self.db = self.client.healthai_db
-        print("Connecté à MongoDB")
+    async def connect(self):
+        try:
+            self.client = AsyncIOMotorClient(
+                settings.MONGODB_URL,
+                serverSelectionTimeoutMS=3000,
+            )
+            await self.client.admin.command("ping")
+            self.db = self.client[settings.MONGODB_DB_NAME]
+            logger.info("Connecté à MongoDB ({})", settings.MONGODB_DB_NAME)
+        except Exception as e:
+            logger.warning("MongoDB indisponible — démarrage sans persistance NoSQL : {}", e)
+            self.client = None
+            self.db = None
 
     def close(self):
         if self.client:
             self.client.close()
+            logger.info("Connexion MongoDB fermée")
 
 
-# On instancie le manager
 mongo_db = MongoDBManager()

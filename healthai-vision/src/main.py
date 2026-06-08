@@ -24,7 +24,7 @@ OLLAMA_BASE_URL = getenv("OLLAMA_BASE_URL", "http://healthai-ollama:11434")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    mongo_db.connect()
+    await mongo_db.connect()
     yield
     mongo_db.close()
 
