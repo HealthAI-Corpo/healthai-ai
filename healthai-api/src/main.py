@@ -21,6 +21,7 @@ from src.core.config import settings
 from src.core.database import dispose_engine
 from src.core.security import get_current_user
 from src.schemas.health import InternalHealthResponse, StatusResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Headers que la requête entrante ne doit JAMAIS pouvoir injecter / passer tels quels.
 # - host : sinon le service interne refuse le routing
@@ -206,3 +207,6 @@ async def test_internal() -> InternalHealthResponse:
     return InternalHealthResponse(
         gateway="ok", vision_service=vision, workout_service=workout
     )
+
+
+Instrumentator().instrument(app).expose(app)

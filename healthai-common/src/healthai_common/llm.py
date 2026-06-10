@@ -11,7 +11,9 @@ class LLMJsonError(ValueError):
     """
 
     def __init__(self, raw_text: str, original: Exception | None = None) -> None:
-        super().__init__(f"Le LLM n'a pas renvoyé un JSON valide. Texte brut reçu : {raw_text}")
+        super().__init__(
+            f"Le LLM n'a pas renvoyé un JSON valide. Texte brut reçu : {raw_text}"
+        )
         self.raw_text = raw_text
         self.original = original
 

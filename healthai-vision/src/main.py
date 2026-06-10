@@ -12,6 +12,7 @@ from os import getenv
 
 import httpx
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.database_mongo import mongo_db
 from src.routers.analyze import router as analyze_router
@@ -63,3 +64,6 @@ async def health() -> dict:
         "mongodb_connected": mongo_db.db is not None,
         "ollama_connected": ollama_online,
     }
+
+
+Instrumentator().instrument(app).expose(app)

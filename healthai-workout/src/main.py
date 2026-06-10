@@ -7,6 +7,7 @@ import httpx
 import joblib
 from fastapi import FastAPI
 from loguru import logger
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.core.config import settings
 from src.database_mongo import mongo_db
@@ -16,7 +17,7 @@ from src.routers.calorie_from_session import router as calorie_from_session_rout
 from src.routers.recommendations import router as recommendations_router
 from src.services.calorie_service import CalorieService
 from src.services.recommendation_service import load_recommendation_service
-from prometheus_fastapi_instrumentator import Instrumentator
+
 
 def _load_artifact(path: Path):
     """Charge un artefact pkl via joblib avec fallback pickle."""
@@ -84,7 +85,6 @@ app.include_router(recommendations_router)
 app.include_router(ai_sessions_router)
 
 
-
 @app.get("/", include_in_schema=False)
 async def root():
     return {"message": "Workout Service is up and running"}
@@ -105,4 +105,6 @@ async def health():
         "service": "healthai-workout",
         "ollama_integration": ollama_status,
     }
+
+
 Instrumentator().instrument(app).expose(app)
