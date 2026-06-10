@@ -2,7 +2,6 @@
 Configuration et constantes du POC - Prédiction Calories Brûlées
 """
 
-import os
 from pathlib import Path
 
 # ============================================================================
