@@ -27,6 +27,7 @@ dependencies = [
     "pydantic-settings>=2.14.0",
     # Bibliothèque partagée (client LLM Ollama commun à workout et vision)
     "healthai-common",
+    "prometheus-fastapi-instrumentator>=8.0.0",
 ]
 
 [project.optional-dependencies]
