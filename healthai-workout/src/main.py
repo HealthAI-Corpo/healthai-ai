@@ -7,6 +7,7 @@ import httpx
 import joblib
 from fastapi import FastAPI
 from loguru import logger
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.core.config import settings
 from src.database_mongo import mongo_db
@@ -104,3 +105,6 @@ async def health():
         "service": "healthai-workout",
         "ollama_integration": ollama_status,
     }
+
+
+Instrumentator().instrument(app).expose(app)

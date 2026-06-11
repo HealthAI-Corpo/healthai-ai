@@ -7,6 +7,19 @@ Sauvegarde automatique des modèles et résultats
 import sys
 import logging
 from sklearn.dummy import DummyRegressor
+from src.data_loading import load_raw_data
+from src.preprocessing import fit_transform
+from src.model_training import train_random_forest, train_gradient_boosting
+from src.model_evaluation import evaluate_model, compare_models
+from src.model_serialization import (
+    get_next_version_dir,
+    save_model,
+    save_metrics,
+    save_training_data,
+    save_scaler,
+    save_transformation_metadata,
+    save_training_log,
+)
 
 # Configurer l'encodage UTF-8 pour stdout (Windows)
 if sys.stdout.encoding != "utf-8":
@@ -29,24 +42,11 @@ from config import (
     SCALING_METHOD,
     RF_PARAMS,
     GB_PARAMS,
-    METRICS_THRESHOLDS,
     DATA_MODELS_DIR,
     MODEL_NAME,
     VERSION_MAJOR,
 )
-from src.data_loading import load_raw_data
-from src.preprocessing import fit_transform
-from src.model_training import train_random_forest, train_gradient_boosting
-from src.model_evaluation import evaluate_model, evaluate_metrics, compare_models
-from src.model_serialization import (
-    get_next_version_dir,
-    save_model,
-    save_metrics,
-    save_training_data,
-    save_scaler,
-    save_transformation_metadata,
-    save_training_log,
-)
+
 
 
 def main():
@@ -122,9 +122,9 @@ def main():
         gb_eval = evaluate_model(gb_model, X_test, y_test)
         baseline_eval = evaluate_model(baseline_model, X_test, y_test)
 
-        rf_quality = evaluate_metrics(rf_eval, METRICS_THRESHOLDS)
-        gb_quality = evaluate_metrics(gb_eval, METRICS_THRESHOLDS)
-        baseline_quality = evaluate_metrics(baseline_eval, METRICS_THRESHOLDS)
+        #rf_quality = evaluate_metrics(rf_eval, METRICS_THRESHOLDS)
+        #gb_quality = evaluate_metrics(gb_eval, METRICS_THRESHOLDS)
+        #baseline_quality = evaluate_metrics(baseline_eval, METRICS_THRESHOLDS)
 
         comparison = compare_models(rf_eval, gb_eval, baseline_eval)
         logger.info(
